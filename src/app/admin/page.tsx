@@ -230,6 +230,7 @@ interface Admin {
   id: string;
   name: string;
   email: string;
+  unitNumber: string;
   position: string;
   adminPosition: string;
 }
@@ -730,6 +731,7 @@ export default function AdminDashboard() {
   const [newAdmin, setNewAdmin] = useState({
     name: "",
     email: "",
+    unitNumber: "",
     position: "",
     //password: "",
     adminPosition: "",
@@ -2125,61 +2127,55 @@ const updateStats = () => {
   };
   
   // Admin Functions
-  const handleAddAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsAddingAdmin(true);
+const handleAddAdmin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsAddingAdmin(true);
 
-    try {
-      // First create the auth user
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        newAdmin.email,
-        "TempPassword123"
-      );
+  try {
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      `${newAdmin.email}`,
+      "TempPassword123"
+    );
 
-      const user = userCredential.user;
+    const user = userCredential.user;
 
-      await setDoc(doc(db, "admins", user.uid), {
-        id: user.uid,
-        name: newAdmin.name,
-        email: newAdmin.email,
-        position: newAdmin.position,
-        createdAt: serverTimestamp(),
-        adminPosition: newAdmin.adminPosition,
-      });
+    await setDoc(doc(db, "admins", user.uid), {
+      id: user.uid,
+      name: newAdmin.name,
+      email: newAdmin.email,
+      unitNumber: newAdmin.unitNumber, 
+      position: newAdmin.position,
+      createdAt: serverTimestamp(),
+      adminPosition: newAdmin.adminPosition,
+    });
 
-      setNewAdmin({
-        name: "",
-        email: "",
-        position: "",
-        //password: "",
-        adminPosition: "",
-      });
+    setNewAdmin({
+      name: "",
+      email: "",
+      unitNumber: "",
+      position: "",
+      adminPosition: "",
+    });
 
-      setShowAddAdminPopup(false);
-      fetchAdmins();
+    setShowAddAdminPopup(false);
+    fetchAdmins();
 
-      alert("Admin added successfully!");
-    } catch (error: any) {
-      console.error("Error adding admin:", error);
+    alert("Admin added successfully! Username: " + newAdmin.unitNumber);
+  } catch (error: any) {
+    console.error("Error adding admin:", error);
 
-      if (error.code === "auth/email-already-in-use") {
-        alert(
-          "This email is already registered. Please use a different email."
-        );
-      } else {
-        alert("Failed to add admin. Please try again.");
-      }
-    } finally {
-      setIsAddingAdmin(false);
-    }
-  };
+  } finally {
+    setIsAddingAdmin(false);
+  }
+};
 
   const handleEditAdmin = (admin: Admin) => {
     setEditingAdmin(admin);
     setNewAdmin({
       name: admin.name,
       email: admin.email,
+      unitNumber: admin.unitNumber,
       position: admin.position,
       //password: "",
       adminPosition: admin.adminPosition,
@@ -2197,6 +2193,7 @@ const updateStats = () => {
       await updateDoc(doc(db, "admins", editingAdmin.id), {
         name: newAdmin.name,
         email: newAdmin.email,
+        unitNumber: newAdmin.unitNumber,
         position: newAdmin.position,
         updatedAt: serverTimestamp(),
         adminPosition: newAdmin.adminPosition,
@@ -3535,8 +3532,8 @@ const filteredMembers = members.filter((member) => {
           </header>
           {activeTab === "dashboard" && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
-                {/* Stats cards */}
+              {/* <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
+                 Stats cards 
                 <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
                   <div className="flex items-center">
                     <div className="p-3 bg-blue-100 rounded-lg mr-4">
@@ -3690,7 +3687,7 @@ const filteredMembers = members.filter((member) => {
                     </div>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
               {/* Quick Actions */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -4083,6 +4080,7 @@ const filteredMembers = members.filter((member) => {
                     setNewAdmin({
                       name: "",
                       email: "",
+                      unitNumber: "",
                       position: "",
                       //password: "",
                       adminPosition: "",
@@ -4147,6 +4145,7 @@ const filteredMembers = members.filter((member) => {
                         {[
                           "Name",
                           "Email",
+                          "Unit Number",
                           "Society Position",
                           "Administrator Position",
                           "Actions",
@@ -4190,6 +4189,11 @@ const filteredMembers = members.filter((member) => {
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">
                                 {admin.email}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {admin.unitNumber}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -4485,6 +4489,21 @@ const filteredMembers = members.filter((member) => {
                         placeholder="Email Address"
                       />
                     </div>
+                    <div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Unit Number <span className="text-red-500">*</span>
+  </label>
+  <input
+    type="text"
+    required
+    value={newAdmin.unitNumber}
+    onChange={(e) =>
+      setNewAdmin({ ...newAdmin, unitNumber: e.target.value })
+    }
+    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    placeholder="Add 'A' before your unit number (Eg. AC301)"
+  />
+</div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Society Position

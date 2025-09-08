@@ -104,22 +104,49 @@ export default function Home() {
     fetchFaqs();
   }, []);
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setResetError("");
-    setResetSuccess("");
-    setIsResetting(true);
+const handleForgotPassword = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setResetError("");
+  setResetSuccess("");
+  setIsResetting(true);
 
-    try {
-      await sendPasswordResetEmail(auth, resetEmail);
-      setResetSuccess("Password reset email sent! Check your inbox.");
-      setResetEmail("");
-    } catch (err: any) {
-      setResetError(err.message);
-    } finally {
+  try {
+    const adminsQuery = query(
+      collection(db, "admins"),
+      where("email", "==", resetEmail)
+    );
+
+    const membersQuery = query(
+      collection(db, "members"),
+      where("email", "==", resetEmail)
+    );
+
+    const [adminsSnapshot, membersSnapshot] = await Promise.all([
+      getDocs(adminsQuery),
+      getDocs(membersQuery),
+    ]);
+
+    let userEmail = "";
+
+    if (!adminsSnapshot.empty) {
+      userEmail = adminsSnapshot.docs[0].data().email;
+    } else if (!membersSnapshot.empty) {
+      userEmail = membersSnapshot.docs[0].data().email;
+    } else {
+      setResetError("Email/Unit number not found");
       setIsResetting(false);
+      return;
     }
-  };
+
+    await sendPasswordResetEmail(auth, userEmail);
+    setResetSuccess("Password reset email sent! Check your inbox.");
+    setResetEmail("");
+  } catch (err: any) {
+    setResetError(err.message);
+  } finally {
+    setIsResetting(false);
+  }
+};
 
   const fetchAllTestimonials = async () => {
     try {
@@ -168,33 +195,64 @@ export default function Home() {
     };
   }, []);
 
-const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError("");
-  setIsLoading(true);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
 
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    setIsLoggedIn(true);
+    try {
+      const adminsQuery = query(
+        collection(db, "admins"),
+        where("unitNumber", "==", email)
+      );
 
-    // Look up user in admins collection by UID
-    const adminRef = doc(db, "admins", user.uid);
-    const adminSnap = await getDoc(adminRef);
+      const membersQuery = query(
+        collection(db, "members"),
+        where("unitNumber", "==", email)
+      );
 
-    if (adminSnap.exists()) {
-      // ✅ user is in admins collection
-      router.push("/admin");
-    } else {
-      // ❌ not an admin
-      router.push("/member");
+      const [adminsSnapshot, membersSnapshot] = await Promise.all([
+        getDocs(adminsQuery),
+        getDocs(membersQuery),
+      ]);
+
+      let userEmail = "";
+      let isAdmin = false;
+
+      if (!adminsSnapshot.empty) {
+        const adminDoc = adminsSnapshot.docs[0];
+        userEmail = adminDoc.data().email;
+        isAdmin = true;
+      } else if (!membersSnapshot.empty) {
+        const memberDoc = membersSnapshot.docs[0];
+        userEmail = memberDoc.data().email;
+        isAdmin = false;
+      } else {
+        setError("Invalid unit number or password");
+        setIsLoading(false);
+        return;
+      }
+
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        userEmail,
+        password
+      );
+      
+      const user = userCredential.user;
+      setIsLoggedIn(true);
+
+      if (isAdmin) {
+        router.push("/admin");
+      } else {
+        router.push("/member");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
-  } catch (err: any) {
-    setError(err.message);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     const fetchPreviewTestimonials = async () => {
@@ -660,20 +718,21 @@ const handleLogin = async (e: React.FormEvent) => {
                 Login
               </h2>
               <form onSubmit={handleLogin}>
+                {/* In the login form */}
                 <div className="mb-4">
                   <label
                     className="block text-gray-700 text-sm font-medium mb-2"
                     htmlFor="email"
                   >
-                    Email
+                    Username
                   </label>
                   <input
                     id="email"
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                    placeholder="Enter your email"
+                    placeholder="Enter your unit number"
                     required
                     disabled={isLoading}
                   />
@@ -742,97 +801,100 @@ const handleLogin = async (e: React.FormEvent) => {
           )}
 
           {/* Forgot Password Modal */}
-{showForgotPassword && (
-  <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold text-gray-800">Reset Password</h2>
-        <button
-          onClick={() => {
-            setShowForgotPassword(false);
-            setResetError("");
-            setResetSuccess("");
-          }}
-          className="text-gray-400 hover:text-gray-600 cursor-pointer"
-          disabled={isResetting}
-        >
-          ✖
-        </button>
-      </div>
+          {showForgotPassword && (
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    Reset Password
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setResetError("");
+                      setResetSuccess("");
+                    }}
+                    className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                    disabled={isResetting}
+                  >
+                    ✖
+                  </button>
+                </div>
 
-      {resetSuccess ? (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-          {resetSuccess}
-        </div>
-      ) : (
-        <form onSubmit={handleForgotPassword}>
-          {resetError && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {resetError}
+                {resetSuccess ? (
+                  <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                    {resetSuccess}
+                  </div>
+                ) : (
+                  <form onSubmit={handleForgotPassword}>
+                    {resetError && (
+                      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                        {resetError}
+                      </div>
+                    )}
+
+                    <div className="mb-4">
+                      <label
+                        className="block text-gray-700 text-sm font-medium mb-2"
+                        htmlFor="reset-email"
+                      >
+                        Email Address
+                      </label>
+                      <input
+                        id="reset-email"
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                        placeholder="Enter your email address"
+                        required
+                        disabled={isResetting}
+                      />
+                    </div>
+
+                    <p className="text-gray-600 text-sm mb-4">
+                      Enter your email address and we'll send you a link to
+                      reset your password.
+                    </p>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-center transition-colors flex items-center justify-center cursor-pointer"
+                      disabled={isResetting}
+                    >
+                      {isResetting ? (
+                        <>
+                          <svg
+                            className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            ></circle>
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                          </svg>
+                          Sending...
+                        </>
+                      ) : (
+                        "Send Reset Link"
+                      )}
+                    </button>
+                  </form>
+                )}
+              </div>
             </div>
           )}
-
-          <div className="mb-4">
-            <label
-              className="block text-gray-700 text-sm font-medium mb-2"
-              htmlFor="reset-email"
-            >
-              Email Address
-            </label>
-            <input
-              id="reset-email"
-              type="email"
-              value={resetEmail}
-              onChange={(e) => setResetEmail(e.target.value)}
-              className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-              placeholder="Enter your email address"
-              required
-              disabled={isResetting}
-            />
-          </div>
-
-          <p className="text-gray-600 text-sm mb-4">
-            Enter your email address and we'll send you a link to reset your password.
-          </p>
-
-          <button
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-center transition-colors flex items-center justify-center cursor-pointer"
-            disabled={isResetting}
-          >
-            {isResetting ? (
-              <>
-                <svg
-                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                Sending...
-              </>
-            ) : (
-              "Send Reset Link"
-            )}
-          </button>
-        </form>
-      )}
-    </div>
-  </div>
-)}
 
           {/* ✅ Login Modal (Mobile) */}
           {showLoginModal && (
