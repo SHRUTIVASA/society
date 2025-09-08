@@ -1517,13 +1517,13 @@ export default function MemberDashboard() {
     expandedSuggestion: string | null;
     setExpandedSuggestion: React.Dispatch<React.SetStateAction<string | null>>;
   }) => {
-    // Local state for comment input
+
     const [commentInput, setCommentInput] = useState("");
 
     const handleAddComment = () => {
       if (commentInput.trim()) {
         onAddComment(suggestion.id, commentInput);
-        setCommentInput(""); // Clear input after submitting
+        setCommentInput(""); 
       }
     };
 

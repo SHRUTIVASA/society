@@ -257,7 +257,7 @@ interface ChatMessage {
   senderName: string;
   message: string;
   timestamp: Timestamp;
-  readBy?: string[]; 
+  readBy?: string[];
 }
 
 // ==============================
@@ -574,40 +574,82 @@ const ServiceProviderIcon = () => (
   </svg>
 );
 
-
 // ==============================
 // UTILITY FUNCTIONS
 // ==============================
 
-const formatDateTime = (timestamp: Timestamp | undefined): string => {
+const formatDateTime = (timestamp: any): string => {
   if (!timestamp) return "N/A";
 
-  const date = timestamp instanceof Date ? timestamp : timestamp.toDate?.();
-  if (!date) return "N/A";
+  let date: Date;
 
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const year = date.getFullYear();
+  try {
+    // Handle different timestamp formats
+    if (timestamp instanceof Date) {
+      date = timestamp;
+    } else if (timestamp && typeof timestamp.toDate === "function") {
+      // Firestore Timestamp
+      date = timestamp.toDate();
+    } else if (typeof timestamp === "string") {
+      // ISO string
+      date = new Date(timestamp);
+    } else if (typeof timestamp === "number") {
+      // Unix timestamp
+      date = new Date(timestamp);
+    } else if (timestamp && timestamp.seconds) {
+      // Firestore Timestamp with seconds property
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      return "N/A";
+    }
 
-  const hours = date.getHours().toString().padStart(2, "0");
-  const minutes = date.getMinutes().toString().padStart(2, "0");
+    // Validate the date
+    if (isNaN(date.getTime())) return "N/A";
 
-  return `${day}-${month}-${year} ${hours}:${minutes}`;
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const year = date.getFullYear();
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+
+    return `${day}-${month}-${year} ${hours}:${minutes}`;
+  } catch (error) {
+    console.error("Error formatting date:", error, timestamp);
+    return "N/A";
+  }
 };
 
-const formatDateToDDMMYYYY = (
-  timestamp: Timestamp | Date | undefined
-): string => {
+const formatDateToDDMMYYYY = (timestamp: any): string => {
   if (!timestamp) return "N/A";
 
-  const date = timestamp instanceof Date ? timestamp : timestamp.toDate?.();
-  if (!date) return "N/A";
+  let date: Date;
 
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const year = date.getFullYear();
+  try {
+    if (timestamp instanceof Date) {
+      date = timestamp;
+    } else if (timestamp && typeof timestamp.toDate === "function") {
+      date = timestamp.toDate();
+    } else if (typeof timestamp === "string") {
+      date = new Date(timestamp);
+    } else if (typeof timestamp === "number") {
+      date = new Date(timestamp);
+    } else if (timestamp && timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      return "N/A";
+    }
 
-  return `${day}-${month}-${year}`;
+    if (isNaN(date.getTime())) return "N/A";
+
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const year = date.getFullYear();
+
+    return `${day}-${month}-${year}`;
+  } catch (error) {
+    console.error("Error formatting date:", error, timestamp);
+    return "N/A";
+  }
 };
 
 // ==============================
@@ -617,21 +659,21 @@ const formatDateToDDMMYYYY = (
 export default function AdminDashboard() {
   const router = useRouter();
 
-   // ==============================
+  // ==============================
   // STATE MANAGEMENT
   // ==============================
-  
+
   // Authentication & User State
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminDetails, setAdminDetails] = useState<any>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  
+
   // UI State
   const [activeTab, setActiveTab] = useState("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   // Data Collections
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [faqs, setFaqs] = useState<FAQ[]>([]);
@@ -640,14 +682,22 @@ export default function AdminDashboard() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [serviceProviders, setServiceProviders] = useState<ServiceProvider[]>([]);
+  const [serviceProviders, setServiceProviders] = useState<ServiceProvider[]>(
+    []
+  );
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [committeeMembers, setCommitteeMembers] = useState<CommitteeMember[]>([]);
+  const [committeeMembers, setCommitteeMembers] = useState<CommitteeMember[]>(
+    []
+  );
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [redevelopmentForms, setRedevelopmentForms] = useState<RedevelopmentForm[]>([]);
-  const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>([]);
-  
+  const [redevelopmentForms, setRedevelopmentForms] = useState<
+    RedevelopmentForm[]
+  >([]);
+  const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>(
+    []
+  );
+
   // Filter States
   const [wingFilter, setWingFilter] = useState<string>("all");
   const [flatNumberFilter, setFlatNumberFilter] = useState<string>("all");
@@ -656,22 +706,29 @@ export default function AdminDashboard() {
   const [testimonialFilter, setTestimonialFilter] = useState<string>("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
   const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>("all");
-  const [complaintStatusFilter, setComplaintStatusFilter] = useState<string>("all");
+  const [complaintStatusFilter, setComplaintStatusFilter] =
+    useState<string>("all");
   const [vehicleFilter, setVehicleFilter] = useState<string>("all");
   const [providerRoleFilter, setProviderRoleFilter] = useState<string>("all");
-  const [providerStatusFilter, setProviderStatusFilter] = useState<string>("all");
+  const [providerStatusFilter, setProviderStatusFilter] =
+    useState<string>("all");
   const [committeeFilter, setCommitteeFilter] = useState<string>("all");
   const [adminFilter, setAdminFilter] = useState<string>("all");
-  const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<string>("all");
-  const [suggestionCategoryFilter, setSuggestionCategoryFilter] = useState<string>("all");
-  const [suggestionPriorityFilter, setSuggestionPriorityFilter] = useState<string>("all");
-  const [redevelopmentStatusFilter, setRedevelopmentStatusFilter] = useState<string>("all");
-  
-// Search States
+  const [suggestionStatusFilter, setSuggestionStatusFilter] =
+    useState<string>("all");
+  const [suggestionCategoryFilter, setSuggestionCategoryFilter] =
+    useState<string>("all");
+  const [suggestionPriorityFilter, setSuggestionPriorityFilter] =
+    useState<string>("all");
+  const [redevelopmentStatusFilter, setRedevelopmentStatusFilter] =
+    useState<string>("all");
+
+  // Search States
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
-  const [redevelopmentSearchTerm, setRedevelopmentSearchTerm] = useState<string>("");
-  
-// Form States
+  const [redevelopmentSearchTerm, setRedevelopmentSearchTerm] =
+    useState<string>("");
+
+  // Form States
   const [newMember, setNewMember] = useState({
     name: "",
     email: "",
@@ -745,7 +802,7 @@ export default function AdminDashboard() {
     isPublic: false,
   });
 
-// Modal States
+  // Modal States
   const [showAddPaymentPopup, setShowAddPaymentPopup] = useState(false);
   const [showMemberPopup, setShowMemberPopup] = useState(false);
   const [showFAQPopup, setShowFAQPopup] = useState(false);
@@ -767,20 +824,30 @@ export default function AdminDashboard() {
   const [showFormModal, setShowFormModal] = useState(false);
   const [showSuggestionModal, setShowSuggestionModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
-  
+
   // Selection States
-  const [selectedMember, setSelectedMember] = useState<MemberDetails | null>(null);
-  const [selectedVehicleMember, setSelectedVehicleMember] = useState<Member | null>(null);
-  const [selectedComplaintChat, setSelectedComplaintChat] = useState<string | null>(null);
-  const [selectedForm, setSelectedForm] = useState<RedevelopmentForm | null>(null);
-  const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
-  
+  const [selectedMember, setSelectedMember] = useState<MemberDetails | null>(
+    null
+  );
+  const [selectedVehicleMember, setSelectedVehicleMember] =
+    useState<Member | null>(null);
+  const [selectedComplaintChat, setSelectedComplaintChat] = useState<
+    string | null
+  >(null);
+  const [selectedForm, setSelectedForm] = useState<RedevelopmentForm | null>(
+    null
+  );
+  const [selectedSuggestion, setSelectedSuggestion] =
+    useState<Suggestion | null>(null);
+
   // Editing States
   const [editingFAQ, setEditingFAQ] = useState<FAQ | null>(null);
-  const [editingProvider, setEditingProvider] = useState<ServiceProvider | null>(null);
-  const [editingCommitteeMember, setEditingCommitteeMember] = useState<CommitteeMember | null>(null);
+  const [editingProvider, setEditingProvider] =
+    useState<ServiceProvider | null>(null);
+  const [editingCommitteeMember, setEditingCommitteeMember] =
+    useState<CommitteeMember | null>(null);
   const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null);
-  
+
   // Loading States
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [isAddingPayment, setIsAddingPayment] = useState(false);
@@ -793,7 +860,7 @@ export default function AdminDashboard() {
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
   const [isEditingAdmin, setIsEditingAdmin] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
-  
+
   // Other States
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [showMemberDetails, setShowMemberDetails] = useState(false);
@@ -805,10 +872,16 @@ export default function AdminDashboard() {
   const [formNotes, setFormNotes] = useState("");
   const [suggestionComment, setSuggestionComment] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
-  const [pendingDeletion, setPendingDeletion] = useState<{ itemType: string; itemId: string; itemName: string } | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<{
+    itemType: string;
+    itemId: string;
+    itemName: string;
+  } | null>(null);
   const [newVehicleFiles, setNewVehicleFiles] = useState<File[]>([]);
-  const [unreadMessageCounts, setUnreadMessageCounts] = useState<{ [complaintId: string]: number }>({});
-  
+  const [unreadMessageCounts, setUnreadMessageCounts] = useState<{
+    [complaintId: string]: number;
+  }>({});
+
   // Stats State
   const [stats, setStats] = useState({
     totalTestimonials: 0,
@@ -838,470 +911,514 @@ export default function AdminDashboard() {
     );
   };
 
-// ==============================
-// DATA FETCHING FUNCTIONS
-// ==============================
+  // ==============================
+  // DATA FETCHING FUNCTIONS
+  // ==============================
 
-const fetchData = async () => {
-  try {
-    setLoading(true);
-    
-    await Promise.all([
-      fetchTestimonials(),
-      fetchFAQs(),
-      fetchQueries(),
-      fetchMembers(),
-      fetchPayments(),
-      fetchSuggestions(),
-      fetchRedevelopmentForms(),
-      fetchCommitteeMembers(),
-      fetchAdmins(),
-      fetchDocuments(),
-      fetchVehicles(),
-      fetchServiceProviders(),
-      fetchComplaints(),
-    ]);
-    
-    updateStats();
-  } catch (error) {
-    console.error("Error fetching data:", error);
-  } finally {
-    setLoading(false);
-  }
-};
+  const fetchData = async () => {
+    try {
+      setLoading(true);
 
-const fetchTestimonials = async () => {
-  try {
-    const testimonialsQuery = query(collection(db, "testimonials"));
-    const testimonialsSnapshot = await getDocs(testimonialsQuery);
-    const testimonialsData = testimonialsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Testimonial[];
-    setTestimonials(testimonialsData);
-    return testimonialsData;
-  } catch (error) {
-    console.error("Error fetching testimonials:", error);
-    return [];
-  }
-};
+      await Promise.all([
+        fetchTestimonials(),
+        fetchFAQs(),
+        fetchQueries(),
+        fetchMembers(),
+        fetchPayments(),
+        fetchSuggestions(),
+        fetchRedevelopmentForms(),
+        fetchCommitteeMembers(),
+        fetchAdmins(),
+        fetchDocuments(),
+        fetchVehicles(),
+        fetchServiceProviders(),
+        fetchComplaints(),
+      ]);
 
-const fetchFAQs = async () => {
-  try {
-    const faqsQuery = query(collection(db, "faqs"));
-    const faqsSnapshot = await getDocs(faqsQuery);
-    const faqsData = faqsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as FAQ[];
-    setFaqs(faqsData);
-    return faqsData;
-  } catch (error) {
-    console.error("Error fetching FAQs:", error);
-    return [];
-  }
-};
+      updateStats();
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-const fetchQueries = async () => {
-  try {
-    const queriesQuery = query(collection(db, "queries"));
-    const queriesSnapshot = await getDocs(queriesQuery);
-    const queriesData = queriesSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Query[];
-    setQueries(queriesData);
-    return queriesData;
-  } catch (error) {
-    console.error("Error fetching queries:", error);
-    return [];
-  }
-};
+  const fetchTestimonials = async () => {
+    try {
+      const testimonialsQuery = query(collection(db, "testimonials"));
+      const testimonialsSnapshot = await getDocs(testimonialsQuery);
+      const testimonialsData = testimonialsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Testimonial[];
+      setTestimonials(testimonialsData);
+      return testimonialsData;
+    } catch (error) {
+      console.error("Error fetching testimonials:", error);
+      return [];
+    }
+  };
 
-const fetchMembers = async () => {
-  try {
-    const membersQuery = query(collection(db, "members"));
-    const membersSnapshot = await getDocs(membersQuery);
-    const membersData = membersSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Member[];
-    setMembers(membersData);
-    return membersData;
-  } catch (error) {
-    console.error("Error fetching members:", error);
-    return [];
-  }
-};
+  const fetchFAQs = async () => {
+    try {
+      const faqsQuery = query(collection(db, "faqs"));
+      const faqsSnapshot = await getDocs(faqsQuery);
+      const faqsData = faqsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as FAQ[];
+      setFaqs(faqsData);
+      return faqsData;
+    } catch (error) {
+      console.error("Error fetching FAQs:", error);
+      return [];
+    }
+  };
 
-const fetchPayments = async () => {
-  try {
-    const memberNameMap: Record<string, string> = {};
-    members.forEach((member) => {
-      memberNameMap[member.id] = member.name;
-    });
+  const fetchQueries = async () => {
+    try {
+      const queriesQuery = query(collection(db, "queries"));
+      const queriesSnapshot = await getDocs(queriesQuery);
+      const queriesData = queriesSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Query[];
+      setQueries(queriesData);
+      return queriesData;
+    } catch (error) {
+      console.error("Error fetching queries:", error);
+      return [];
+    }
+  };
 
-    const paymentsQuery = query(collection(db, "payments"));
-    const paymentsSnapshot = await getDocs(paymentsQuery);
-    const paymentsData: Payment[] = [];
+  const fetchMembers = async () => {
+    try {
+      const membersQuery = query(collection(db, "members"));
+      const membersSnapshot = await getDocs(membersQuery);
+      const membersData = membersSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Member[];
+      setMembers(membersData);
+      return membersData;
+    } catch (error) {
+      console.error("Error fetching members:", error);
+      return [];
+    }
+  };
 
-    paymentsSnapshot.forEach((doc) => {
-      const paymentDoc = doc.data();
-      const memberId = doc.id;
+  const fetchPayments = async () => {
+    try {
+      const paymentsQuery = query(collection(db, "payments"));
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+      const paymentsData: Payment[] = [];
 
-      Object.keys(paymentDoc).forEach((transactionId) => {
-        if (transactionId !== "id" && paymentDoc[transactionId]) {
-          const payment = paymentDoc[transactionId];
+      paymentsSnapshot.forEach((doc) => {
+        const paymentDoc = doc.data();
+        const memberId = doc.id;
+
+        // Handle different possible data structures
+        if (paymentDoc.transactionId && paymentDoc.amount) {
+          // Single payment at document level
           paymentsData.push({
-            id: transactionId,
+            id: paymentDoc.transactionId,
             memberId: memberId,
-            memberName: memberNameMap[memberId] || "Unknown Member",
-            amount: payment.amount,
-            dueDate: payment.dueDate,
-            paidDate: payment.paidDate,
-            status: payment.status,
-            type: payment.type,
-            transactionId: transactionId,
+            memberName: paymentDoc.memberName || "Unknown Member",
+            amount: paymentDoc.amount,
+            dueDate: paymentDoc.dueDate,
+            paidDate: paymentDoc.paidDate,
+            status: paymentDoc.status || "pending",
+            type: paymentDoc.type || "Maintenance",
+            transactionId: paymentDoc.transactionId,
           } as Payment);
+        } else {
+          // Multiple payments nested under transaction IDs
+          Object.keys(paymentDoc).forEach((key) => {
+            const payment = paymentDoc[key];
+
+            if (
+              payment &&
+              typeof payment === "object" &&
+              payment.amount !== undefined
+            ) {
+              const transactionId = payment.transactionId || key;
+
+              paymentsData.push({
+                id: transactionId,
+                memberId: memberId,
+                memberName: payment.memberName || "Unknown Member",
+                amount: payment.amount,
+                dueDate: payment.dueDate,
+                paidDate: payment.paidDate,
+                status: payment.status || "pending",
+                type: payment.type || "Maintenance",
+                transactionId: transactionId,
+              } as Payment);
+            }
+          });
         }
       });
-    });
 
-    setPayments(paymentsData);
-    return paymentsData;
-  } catch (error) {
-    console.error("Error fetching payments:", error);
-    return [];
-  }
-};
+      setPayments(paymentsData);
 
-const fetchSuggestions = async () => {
-  try {
-    const suggestionsQuery = query(
-      collection(db, "suggestions"),
-      orderBy("createdAt", "desc")
-    );
-    const suggestionsSnapshot = await getDocs(suggestionsQuery);
-    const suggestionsData = suggestionsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt,
-      updatedAt: doc.data().updatedAt,
-    })) as Suggestion[];
-    
-    setSuggestions(suggestionsData);
-    return suggestionsData;
-  } catch (error) {
-    console.error("Error fetching suggestions:", error);
-    return [];
-  }
-};
+      // Update stats
+      const pendingPayments = paymentsData.filter(
+        (p) => p.status === "pending"
+      ).length;
+      setStats((prev) => ({
+        ...prev,
+        pendingPayments,
+      }));
 
-const fetchRedevelopmentForms = async () => {
-  try {
-    const formsQuery = query(collection(db, "redevelopmentForms"));
-    const formsSnapshot = await getDocs(formsQuery);
-    const formsData: RedevelopmentForm[] = [];
-
-    for (const formDoc of formsSnapshot.docs) {
-      const formData = formDoc.data();
-      formsData.push({
-        id: formDoc.id,
-        userId: formData.userId,
-        name: formData.name,
-        phone: formData.phone,
-        userUnit: formData.userUnit,
-        email: formData.email,
-        status: formData.status,
-        submittedAt: formData.submittedAt,
-        alternateAddress: formData.alternateAddress,
-        vacateDate: formData.vacateDate,
-        fileUrls: formData.fileUrls,
-      } as RedevelopmentForm);
+      return paymentsData;
+    } catch (error) {
+      console.error("Error fetching payments:", error);
+      return [];
     }
+  };
 
-    setRedevelopmentForms(formsData);
-    return formsData;
-  } catch (error) {
-    console.error("Error fetching redevelopment forms:", error);
-    return [];
-  }
-};
+  const fetchSuggestions = async () => {
+    try {
+      const suggestionsQuery = query(
+        collection(db, "suggestions"),
+        orderBy("createdAt", "desc")
+      );
+      const suggestionsSnapshot = await getDocs(suggestionsQuery);
+      const suggestionsData = suggestionsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt,
+        updatedAt: doc.data().updatedAt,
+      })) as Suggestion[];
 
-const fetchCommitteeMembers = async () => {
-  try {
-    const committeeQuery = query(collection(db, "committee"));
-    const committeeSnapshot = await getDocs(committeeQuery);
-    const committeeData = committeeSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as CommitteeMember[];
-    setCommitteeMembers(committeeData);
-    return committeeData;
-  } catch (error) {
-    console.error("Error fetching committee members:", error);
-    return [];
-  }
-};
+      setSuggestions(suggestionsData);
+      return suggestionsData;
+    } catch (error) {
+      console.error("Error fetching suggestions:", error);
+      return [];
+    }
+  };
 
-const fetchAdmins = async () => {
-  try {
-    const adminsQuery = query(collection(db, "admins"));
-    const adminsSnapshot = await getDocs(adminsQuery);
-    const adminsData = adminsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Admin[];
-    setAdmins(adminsData);
-    return adminsData;
-  } catch (error) {
-    console.error("Error fetching admins:", error);
-    return [];
-  }
-};
+  const fetchRedevelopmentForms = async () => {
+    try {
+      const formsQuery = query(collection(db, "redevelopmentForms"));
+      const formsSnapshot = await getDocs(formsQuery);
+      const formsData: RedevelopmentForm[] = [];
 
-const fetchDocuments = async () => {
-  try {
-    const docsQuery = query(collection(db, "documents"));
-    const docsSnapshot = await getDocs(docsQuery);
-    const docsData = docsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      uploadedAt: doc.data().uploadedAt instanceof Timestamp
-        ? doc.data().uploadedAt
-        : Timestamp.fromDate(new Date(doc.data().uploadedAt)),
-    })) as Document[];
-    setDocuments(docsData);
-    return docsData;
-  } catch (error) {
-    console.error("Error fetching documents:", error);
-    return [];
-  }
-};
+      for (const formDoc of formsSnapshot.docs) {
+        const formData = formDoc.data();
+        formsData.push({
+          id: formDoc.id,
+          userId: formData.userId,
+          name: formData.name,
+          phone: formData.phone,
+          userUnit: formData.userUnit,
+          email: formData.email,
+          status: formData.status,
+          submittedAt: formData.submittedAt,
+          alternateAddress: formData.alternateAddress,
+          vacateDate: formData.vacateDate,
+          fileUrls: formData.fileUrls,
+        } as RedevelopmentForm);
+      }
 
-const fetchVehicles = async () => {
-  try {
-    const vehiclesData: (Vehicle & {
-      memberId: string;
-      memberName: string;
-      memberUnit: string;
-    })[] = [];
+      setRedevelopmentForms(formsData);
+      return formsData;
+    } catch (error) {
+      console.error("Error fetching redevelopment forms:", error);
+      return [];
+    }
+  };
 
-    const membersQuery = query(collection(db, "members"));
-    const membersSnapshot = await getDocs(membersQuery);
-    const membersData = membersSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Member[];
+  const fetchCommitteeMembers = async () => {
+    try {
+      const committeeQuery = query(collection(db, "committee"));
+      const committeeSnapshot = await getDocs(committeeQuery);
+      const committeeData = committeeSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as CommitteeMember[];
+      setCommitteeMembers(committeeData);
+      return committeeData;
+    } catch (error) {
+      console.error("Error fetching committee members:", error);
+      return [];
+    }
+  };
 
-    for (const member of membersData) {
-      try {
-        const vehiclesSnapshot = await getDocs(
-          collection(db, "members", member.id, "vehicles")
-        );
+  const fetchAdmins = async () => {
+    try {
+      const adminsQuery = query(collection(db, "admins"));
+      const adminsSnapshot = await getDocs(adminsQuery);
+      const adminsData = adminsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Admin[];
+      setAdmins(adminsData);
+      return adminsData;
+    } catch (error) {
+      console.error("Error fetching admins:", error);
+      return [];
+    }
+  };
 
-        vehiclesSnapshot.forEach((doc) => {
-          const vehicleData = doc.data();
-          vehiclesData.push({
-            id: doc.id,
-            memberId: member.id,
-            memberName: member.name,
-            memberUnit: member.unitNumber,
-            ...vehicleData,
-            startDate: vehicleData.startDate instanceof Timestamp
-              ? vehicleData.startDate
-              : Timestamp.fromDate(new Date(vehicleData.startDate)),
-            endDate: vehicleData.endDate instanceof Timestamp
-              ? vehicleData.endDate
-              : vehicleData.endDate
-              ? Timestamp.fromDate(new Date(vehicleData.endDate))
-              : undefined,
-          } as Vehicle & { memberId: string; memberName: string; memberUnit: string });
+  const fetchDocuments = async () => {
+    try {
+      const docsQuery = query(collection(db, "documents"));
+      const docsSnapshot = await getDocs(docsQuery);
+      const docsData = docsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        uploadedAt:
+          doc.data().uploadedAt instanceof Timestamp
+            ? doc.data().uploadedAt
+            : Timestamp.fromDate(new Date(doc.data().uploadedAt)),
+      })) as Document[];
+      setDocuments(docsData);
+      return docsData;
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      return [];
+    }
+  };
+
+  const fetchVehicles = async () => {
+    try {
+      const vehiclesData: (Vehicle & {
+        memberId: string;
+        memberName: string;
+        memberUnit: string;
+      })[] = [];
+
+      const membersQuery = query(collection(db, "members"));
+      const membersSnapshot = await getDocs(membersQuery);
+      const membersData = membersSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Member[];
+
+      for (const member of membersData) {
+        try {
+          const vehiclesSnapshot = await getDocs(
+            collection(db, "members", member.id, "vehicles")
+          );
+
+          vehiclesSnapshot.forEach((doc) => {
+            const vehicleData = doc.data();
+            vehiclesData.push({
+              id: doc.id,
+              memberId: member.id,
+              memberName: member.name,
+              memberUnit: member.unitNumber,
+              ...vehicleData,
+              startDate:
+                vehicleData.startDate instanceof Timestamp
+                  ? vehicleData.startDate
+                  : Timestamp.fromDate(new Date(vehicleData.startDate)),
+              endDate:
+                vehicleData.endDate instanceof Timestamp
+                  ? vehicleData.endDate
+                  : vehicleData.endDate
+                  ? Timestamp.fromDate(new Date(vehicleData.endDate))
+                  : undefined,
+            } as Vehicle & { memberId: string; memberName: string; memberUnit: string });
+          });
+        } catch (error) {
+          console.error(
+            `Error fetching vehicles for member ${member.id}:`,
+            error
+          );
+        }
+      }
+
+      setVehicles(vehiclesData);
+      return vehiclesData;
+    } catch (error) {
+      console.error("Error fetching vehicles:", error);
+      return [];
+    }
+  };
+
+  const fetchServiceProviders = async () => {
+    try {
+      const providersQuery = query(collection(db, "serviceProviders"));
+      const providersSnapshot = await getDocs(providersQuery);
+      const providersData = providersSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        joiningDate:
+          doc.data().joiningDate instanceof Timestamp
+            ? doc.data().joiningDate
+            : Timestamp.fromDate(new Date(doc.data().joiningDate)),
+      })) as ServiceProvider[];
+
+      setServiceProviders(providersData);
+
+      // Update stats
+      const activeProviders = providersData.filter((p) => p.isActive).length;
+      setStats((prev) => ({
+        ...prev,
+        totalServiceProviders: providersData.length,
+        activeServiceProviders: activeProviders,
+      }));
+
+      return providersData;
+    } catch (error) {
+      console.error("Error fetching service providers:", error);
+      return [];
+    }
+  };
+
+  const fetchComplaints = async () => {
+    try {
+      const complaintsQuery = query(collection(db, "complaints"));
+      const complaintsSnapshot = await getDocs(complaintsQuery);
+      const complaintsData: Complaint[] = [];
+
+      for (const complaintDoc of complaintsSnapshot.docs) {
+        const complaintData = complaintDoc.data();
+        const memberId = complaintDoc.id;
+
+        let memberName = "Unknown Member";
+        let unitNumber = "Unknown Unit";
+
+        try {
+          const memberDocRef = doc(db, "members", memberId);
+          const memberDoc = await getDoc(memberDocRef);
+
+          if (memberDoc.exists()) {
+            const member = memberDoc.data() as Member;
+            memberName = member.name || "Unknown Member";
+            unitNumber = member.unitNumber || "Unknown Unit";
+          }
+        } catch (error) {
+          console.error("Error fetching member details:", error);
+        }
+
+        Object.keys(complaintData).forEach((complaintId) => {
+          if (complaintId !== "id" && complaintData[complaintId]) {
+            const complaint = complaintData[complaintId];
+            complaintsData.push({
+              id: complaintId,
+              memberId,
+              memberName,
+              unitNumber,
+              type: complaint.type,
+              title: complaint.title,
+              description: complaint.description,
+              status: complaint.status,
+              createdAt: complaint.createdAt,
+              updatedAt: complaint.updatedAt || complaint.createdAt,
+            } as Complaint);
+          }
         });
-      } catch (error) {
-        console.error(`Error fetching vehicles for member ${member.id}:`, error);
       }
+
+      setComplaints(complaintsData);
+      return complaintsData;
+    } catch (error) {
+      console.error("Error fetching complaints:", error);
+      return [];
     }
+  };
 
-    setVehicles(vehiclesData);
-    return vehiclesData;
-  } catch (error) {
-    console.error("Error fetching vehicles:", error);
-    return [];
-  }
-};
+  const fetchDeletionRequests = async () => {
+    try {
+      const requestsQuery = query(collection(db, "deletionRequests"));
+      const requestsSnapshot = await getDocs(requestsQuery);
+      const requestsData = requestsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt,
+        reviewedAt: doc.data().reviewedAt,
+      })) as DeletionRequest[];
+      setDeletionRequests(requestsData);
+      return requestsData;
+    } catch (error) {
+      console.error("Error fetching deletion requests:", error);
+      return [];
+    }
+  };
 
-const fetchServiceProviders = async () => {
-  try {
-    const providersQuery = query(collection(db, "serviceProviders"));
-    const providersSnapshot = await getDocs(providersQuery);
-    const providersData = providersSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      joiningDate: doc.data().joiningDate instanceof Timestamp
-        ? doc.data().joiningDate
-        : Timestamp.fromDate(new Date(doc.data().joiningDate)),
-    })) as ServiceProvider[];
-
-    setServiceProviders(providersData);
-    
-    // Update stats
-    const activeProviders = providersData.filter((p) => p.isActive).length;
-    setStats((prev) => ({
-      ...prev,
-      totalServiceProviders: providersData.length,
-      activeServiceProviders: activeProviders,
-    }));
-
-    return providersData;
-  } catch (error) {
-    console.error("Error fetching service providers:", error);
-    return [];
-  }
-};
-
-const fetchComplaints = async () => {
-  try {
-    const complaintsQuery = query(collection(db, "complaints"));
-    const complaintsSnapshot = await getDocs(complaintsQuery);
-    const complaintsData: Complaint[] = [];
-
-    for (const complaintDoc of complaintsSnapshot.docs) {
-      const complaintData = complaintDoc.data();
-      const memberId = complaintDoc.id;
-
-      let memberName = "Unknown Member";
-      let unitNumber = "Unknown Unit";
-
-      try {
-        const memberDocRef = doc(db, "members", memberId);
-        const memberDoc = await getDoc(memberDocRef);
-
-        if (memberDoc.exists()) {
-          const member = memberDoc.data() as Member;
-          memberName = member.name || "Unknown Member";
-          unitNumber = member.unitNumber || "Unknown Unit";
-        }
-      } catch (error) {
-        console.error("Error fetching member details:", error);
+  const fetchMemberDetails = async (
+    memberId: string
+  ): Promise<MemberDetails> => {
+    try {
+      const memberDoc = await getDoc(doc(db, "members", memberId));
+      if (!memberDoc.exists()) {
+        throw new Error("Member not found");
       }
 
-      Object.keys(complaintData).forEach((complaintId) => {
-        if (complaintId !== "id" && complaintData[complaintId]) {
-          const complaint = complaintData[complaintId];
-          complaintsData.push({
-            id: complaintId,
-            memberId,
-            memberName,
-            unitNumber,
-            type: complaint.type,
-            title: complaint.title,
-            description: complaint.description,
-            status: complaint.status,
-            createdAt: complaint.createdAt,
-            updatedAt: complaint.updatedAt || complaint.createdAt,
-          } as Complaint);
-        }
+      const memberData = memberDoc.data() as Member;
+
+      // Fetch family members from subcollection
+      const familyMembersSnapshot = await getDocs(
+        collection(db, "members", memberId, "familyMembers")
+      );
+      const familyMembers: FamilyMember[] = [];
+      familyMembersSnapshot.forEach((doc) => {
+        familyMembers.push({ id: doc.id, ...doc.data() } as FamilyMember);
       });
+
+      // Fetch vehicles from subcollection
+      const vehiclesSnapshot = await getDocs(
+        collection(db, "members", memberId, "vehicles")
+      );
+      const vehicles: Vehicle[] = [];
+      vehiclesSnapshot.forEach((doc) => {
+        vehicles.push({ id: doc.id, ...doc.data() } as Vehicle);
+      });
+
+      return {
+        ...memberData,
+        id: memberId,
+        familyMembers,
+        vehicles,
+      };
+    } catch (error) {
+      console.error("Error fetching member details:", error);
+      throw error;
     }
+  };
 
-    setComplaints(complaintsData);
-    return complaintsData;
-  } catch (error) {
-    console.error("Error fetching complaints:", error);
-    return [];
-  }
-};
+  const updateStats = () => {
+    const pendingTestimonials = testimonials.filter((t) => !t.approved).length;
+    const newQueries = queries.filter((q) => q.status === "new").length;
+    const pendingPayments = payments.filter(
+      (p) => p.status === "pending"
+    ).length;
+    const pendingComplaints = complaints.filter(
+      (c) => c.status === "pending"
+    ).length;
+    const pendingSuggestions = suggestions.filter(
+      (s) => s.status === "pending"
+    ).length;
 
-const fetchDeletionRequests = async () => {
-  try {
-    const requestsQuery = query(collection(db, "deletionRequests"));
-    const requestsSnapshot = await getDocs(requestsQuery);
-    const requestsData = requestsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt,
-      reviewedAt: doc.data().reviewedAt,
-    })) as DeletionRequest[];
-    setDeletionRequests(requestsData);
-    return requestsData;
-  } catch (error) {
-    console.error("Error fetching deletion requests:", error);
-    return [];
-  }
-};
-
-const fetchMemberDetails = async (memberId: string): Promise<MemberDetails> => {
-  try {
-    const memberDoc = await getDoc(doc(db, "members", memberId));
-    if (!memberDoc.exists()) {
-      throw new Error("Member not found");
-    }
-
-    const memberData = memberDoc.data() as Member;
-
-    // Fetch family members from subcollection
-    const familyMembersSnapshot = await getDocs(
-      collection(db, "members", memberId, "familyMembers")
+    // Calculate total unread messages across all complaints
+    const totalUnread = Object.values(unreadMessageCounts).reduce(
+      (sum, count) => sum + count,
+      0
     );
-    const familyMembers: FamilyMember[] = [];
-    familyMembersSnapshot.forEach((doc) => {
-      familyMembers.push({ id: doc.id, ...doc.data() } as FamilyMember);
+
+    setStats({
+      totalTestimonials: testimonials.length,
+      pendingTestimonials,
+      totalFAQs: faqs.length,
+      newQueries,
+      totalMembers: members.length,
+      pendingPayments,
+      pendingComplaints,
+      totalServiceProviders: serviceProviders.length,
+      activeServiceProviders: serviceProviders.filter((p) => p.isActive).length,
+      unreadMessages: totalUnread,
     });
+  };
 
-    // Fetch vehicles from subcollection
-    const vehiclesSnapshot = await getDocs(
-      collection(db, "members", memberId, "vehicles")
-    );
-    const vehicles: Vehicle[] = [];
-    vehiclesSnapshot.forEach((doc) => {
-      vehicles.push({ id: doc.id, ...doc.data() } as Vehicle);
-    });
+  // ==============================
+  // DATA MANIPULATION FUNCTIONS
+  // ==============================
 
-    return {
-      ...memberData,
-      id: memberId,
-      familyMembers,
-      vehicles,
-    };
-  } catch (error) {
-    console.error("Error fetching member details:", error);
-    throw error;
-  }
-};
-
-const updateStats = () => {
-
-  const pendingTestimonials = testimonials.filter((t) => !t.approved).length;
-  const newQueries = queries.filter((q) => q.status === "new").length;
-  const pendingPayments = payments.filter((p) => p.status === "pending").length;
-  const pendingComplaints = complaints.filter((c) => c.status === "pending").length;
-  const pendingSuggestions = suggestions.filter((s) => s.status === "pending").length;
-  
-  // Calculate total unread messages across all complaints
-  const totalUnread = Object.values(unreadMessageCounts).reduce(
-    (sum, count) => sum + count, 0
-  );
-
-  setStats({
-    totalTestimonials: testimonials.length,
-    pendingTestimonials,
-    totalFAQs: faqs.length,
-    newQueries,
-    totalMembers: members.length,
-    pendingPayments,
-    pendingComplaints,
-    totalServiceProviders: serviceProviders.length,
-    activeServiceProviders: serviceProviders.filter((p) => p.isActive).length,
-    unreadMessages: totalUnread, 
-  });
-};
-
-// ==============================
-// DATA MANIPULATION FUNCTIONS
-// ==============================
-  
-// Testimonial Functions
+  // Testimonial Functions
   const handleApproveTestimonial = async (id: string) => {
     try {
       await updateDoc(doc(db, "testimonials", id), {
@@ -1323,8 +1440,8 @@ const updateStats = () => {
     );
   };
 
-// FAQ Functions
- const handleAddFAQ = async (e: React.FormEvent) => {
+  // FAQ Functions
+  const handleAddFAQ = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAddingFAQ(true);
 
@@ -1368,7 +1485,7 @@ const updateStats = () => {
       });
 
       setEditingFAQ(null);
-      setShowFAQPopup(false); 
+      setShowFAQPopup(false);
       alert("FAQ updated successfully!");
     } catch (error) {
       console.error("Error updating FAQ:", error);
@@ -1385,18 +1502,18 @@ const updateStats = () => {
     );
   };
 
- // Query Functions
+  // Query Functions
   const handleUpdateQueryStatus = async (id: string, status: string) => {
-      try {
-        await updateDoc(doc(db, "queries", id), {
-          status,
-          updatedAt: serverTimestamp(),
-        });
-        fetchData();
-      } catch (error) {
-        console.error("Error updating query status:", error);
-      }
-    };
+    try {
+      await updateDoc(doc(db, "queries", id), {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+      fetchData();
+    } catch (error) {
+      console.error("Error updating query status:", error);
+    }
+  };
 
   const handleReplyToQuery = (email: string, name: string) => {
     const subject = `Re: Your query for Yesh Krupa Society`;
@@ -1416,61 +1533,61 @@ const updateStats = () => {
     );
   };
 
- // Member Functions
+  // Member Functions
   const handleAddMember = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setIsAddingMember(true);
+    e.preventDefault();
+    setIsAddingMember(true);
 
-      try {
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          newMember.email,
-          "TempPassword123"
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        newMember.email,
+        "TempPassword123"
+      );
+
+      const user = userCredential.user;
+
+      await updateProfile(user, {
+        displayName: newMember.name,
+      });
+
+      await setDoc(doc(db, "members", user.uid), {
+        id: user.uid,
+        name: newMember.name,
+        email: newMember.email,
+        phone: newMember.phone,
+        unitNumber: newMember.unitNumber,
+        memberSince: newMember.memberSince,
+        createdAt: serverTimestamp(),
+      });
+
+      setNewMember({
+        name: "",
+        email: "",
+        phone: "",
+        unitNumber: "",
+        memberSince: "",
+      });
+
+      setShowMemberPopup(false);
+
+      fetchData();
+
+      alert("Member added successfully! Temporary password: TempPassword123");
+    } catch (error: any) {
+      console.error("Error adding member:", error);
+
+      if (error.code === "auth/email-already-in-use") {
+        alert(
+          "This email is already registered. Please use a different email."
         );
-
-        const user = userCredential.user;
-
-        await updateProfile(user, {
-          displayName: newMember.name,
-        });
-
-        await setDoc(doc(db, "members", user.uid), {
-          id: user.uid,
-          name: newMember.name,
-          email: newMember.email,
-          phone: newMember.phone,
-          unitNumber: newMember.unitNumber,
-          memberSince: newMember.memberSince,
-          createdAt: serverTimestamp(),
-        });
-
-        setNewMember({
-          name: "",
-          email: "",
-          phone: "",
-          unitNumber: "",
-          memberSince: "",
-        });
-
-        setShowMemberPopup(false);
-
-        fetchData();
-
-        alert("Member added successfully! Temporary password: TempPassword123");
-      } catch (error: any) {
-        console.error("Error adding member:", error);
-
-        if (error.code === "auth/email-already-in-use") {
-          alert(
-            "This email is already registered. Please use a different email."
-          );
-        } else {
-          alert("Failed to add member. Please try again.");
-        }
-      } finally {
-        setIsAddingMember(false);
+      } else {
+        alert("Failed to add member. Please try again.");
       }
-    };
+    } finally {
+      setIsAddingMember(false);
+    }
+  };
 
   const handleDeleteMember = (id: string) => {
     const member = members.find((m) => m.id === id);
@@ -1491,81 +1608,78 @@ const updateStats = () => {
     }
   };
 
-// Payment Functions
+  // Payment Functions
   const handleAddPayment = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setIsAddingPayment(true);
+    e.preventDefault();
+    setIsAddingPayment(true);
 
-      try {
-        // Get member document using UID
-        const memberDoc = await getDoc(doc(db, "members", newPayment.memberId));
-        if (!memberDoc.exists()) {
-          alert("Member not found!");
-          return;
-        }
-
-        const memberData = memberDoc.data();
-
-        const transactionId = generateTransactionId();
-
-        const paymentDocRef = doc(db, "payments", newPayment.memberId);
-        const paymentDoc = await getDoc(paymentDocRef);
-
-        if (paymentDoc.exists()) {
-          await updateDoc(paymentDocRef, {
-            [transactionId]: {
-              amount: parseFloat(newPayment.amount),
-              dueDate: Timestamp.fromDate(new Date(newPayment.dueDate)),
-              type: newPayment.type,
-              status: newPayment.status,
-              memberId: newPayment.memberId,
-              memberName: memberData.name,
-              createdAt: serverTimestamp(),
-              ...(newPayment.status === "paid" && {
-                paidDate: serverTimestamp(),
-              }),
-            },
-          });
-        } else {
-          await setDoc(paymentDocRef, {
-            [transactionId]: {
-              amount: parseFloat(newPayment.amount),
-              dueDate: Timestamp.fromDate(new Date(newPayment.dueDate)),
-              type: newPayment.type,
-              status: newPayment.status,
-              memberId: newPayment.memberId,
-              memberName: memberData.name,
-              createdAt: serverTimestamp(),
-              ...(newPayment.status === "paid" && {
-                paidDate: serverTimestamp(),
-              }),
-            },
-          });
-        }
-
-        setNewPayment({
-          memberId: "",
-          amount: "",
-          dueDate: "",
-          type: "Maintenance",
-          status: "pending",
-        });
-
-        setMemberSearchTerm("");
-        setShowMemberDropdown(false);
-
-        fetchData();
-
-        setShowAddPaymentPopup(false);
-
-        alert(`Payment added successfully! Transaction ID: ${transactionId}`);
-      } catch (error) {
-        console.error("Error adding payment:", error);
-        alert("Failed to add payment. Please try again.");
-      } finally {
-        setIsAddingPayment(false);
+    try {
+      // Get member document using UID
+      const memberDoc = await getDoc(doc(db, "members", newPayment.memberId));
+      if (!memberDoc.exists()) {
+        alert("Member not found!");
+        return;
       }
-    };
+
+      const memberData = memberDoc.data();
+      const transactionId = generateTransactionId();
+      const currentTimestamp = serverTimestamp();
+
+      const paymentData = {
+        amount: parseFloat(newPayment.amount),
+        dueDate: Timestamp.fromDate(new Date(newPayment.dueDate)),
+        type: newPayment.type,
+        status: newPayment.status,
+        memberId: newPayment.memberId,
+        memberName: memberData.name,
+        transactionId: transactionId,
+        createdAt: currentTimestamp,
+        updatedAt: currentTimestamp,
+        ...(newPayment.status === "paid" && {
+          paidDate: currentTimestamp,
+        }),
+      };
+
+      // Use setDoc with merge: true to avoid overwriting existing payments
+      const paymentDocRef = doc(db, "payments", newPayment.memberId);
+
+      // Get existing data first
+      const existingDoc = await getDoc(paymentDocRef);
+
+      if (existingDoc.exists()) {
+        // Update existing document by adding new payment
+        await updateDoc(paymentDocRef, {
+          [transactionId]: paymentData,
+        });
+      } else {
+        // Create new document
+        await setDoc(paymentDocRef, {
+          [transactionId]: paymentData,
+        });
+      }
+
+      // Reset form
+      setNewPayment({
+        memberId: "",
+        amount: "",
+        dueDate: "",
+        type: "Maintenance",
+        status: "pending",
+      });
+
+      setMemberSearchTerm("");
+      setShowMemberDropdown(false);
+      fetchPayments(); // Refresh payments
+      setShowAddPaymentPopup(false);
+
+      alert(`Payment added successfully! Transaction ID: ${transactionId}`);
+    } catch (error) {
+      console.error("Error adding payment:", error);
+      alert("Failed to add payment. Please try again.");
+    } finally {
+      setIsAddingPayment(false);
+    }
+  };
 
   const handleUpdatePaymentStatus = async (
     memberId: string,
@@ -1574,21 +1688,24 @@ const updateStats = () => {
   ) => {
     try {
       const paymentDocRef = doc(db, "payments", memberId);
-
-      await updateDoc(paymentDocRef, {
+      const updateData: any = {
         [`${transactionId}.status`]: status,
         [`${transactionId}.updatedAt`]: serverTimestamp(),
-        ...(status === "paid" && {
-          [`${transactionId}.paidDate`]: serverTimestamp(),
-        }),
-      });
+      };
 
+      if (status === "paid") {
+        updateData[`${transactionId}.paidDate`] = serverTimestamp();
+      } else {
+        updateData[`${transactionId}.paidDate`] = deleteField();
+      }
+
+      await updateDoc(paymentDocRef, updateData);
       fetchData();
     } catch (error) {
       console.error("Error updating payment status:", error);
     }
   };
-  
+
   const handleDeletePayment = (memberId: string, transactionId: string) => {
     const member = members.find((m) => m.id === memberId);
     initiateDeletion(
@@ -1600,52 +1717,52 @@ const updateStats = () => {
 
   // Complaint Functions
   const handleStatusChange = async (
-      memberId: string,
-      complaintId: string,
-      status: string
-    ) => {
-      try {
-        const complaintDocRef = doc(db, "complaints", memberId);
-        const updatedAt = serverTimestamp();
+    memberId: string,
+    complaintId: string,
+    status: string
+  ) => {
+    try {
+      const complaintDocRef = doc(db, "complaints", memberId);
+      const updatedAt = serverTimestamp();
 
-        await updateDoc(complaintDocRef, {
-          [`${complaintId}.status`]: status,
-          [`${complaintId}.updatedAt`]: updatedAt,
-        });
+      await updateDoc(complaintDocRef, {
+        [`${complaintId}.status`]: status,
+        [`${complaintId}.updatedAt`]: updatedAt,
+      });
 
-        const currentTimestamp = Timestamp.now();
+      const currentTimestamp = Timestamp.now();
 
-        setComplaints((prevComplaints) =>
-          prevComplaints.map((complaint) =>
-            complaint.id === complaintId && complaint.memberId === memberId
-              ? {
-                  ...complaint,
-                  status: status,
-                  updatedAt: currentTimestamp,
-                }
-              : complaint
-          )
-        );
+      setComplaints((prevComplaints) =>
+        prevComplaints.map((complaint) =>
+          complaint.id === complaintId && complaint.memberId === memberId
+            ? {
+                ...complaint,
+                status: status,
+                updatedAt: currentTimestamp,
+              }
+            : complaint
+        )
+      );
 
-        if (status === "pending") {
-          setStats((prev) => ({
-            ...prev,
-            pendingComplaints: prev.pendingComplaints + 1,
-          }));
-        } else {
-          setStats((prev) => ({
-            ...prev,
-            pendingComplaints: Math.max(0, prev.pendingComplaints - 1),
-          }));
-        }
-
-        alert(`Complaint status updated to ${status} successfully!`);
-      } catch (error) {
-        console.error("Error updating complaint status:", error);
-        alert("Failed to update complaint status. Please try again.");
+      if (status === "pending") {
+        setStats((prev) => ({
+          ...prev,
+          pendingComplaints: prev.pendingComplaints + 1,
+        }));
+      } else {
+        setStats((prev) => ({
+          ...prev,
+          pendingComplaints: Math.max(0, prev.pendingComplaints - 1),
+        }));
       }
-    };
-  
+
+      alert(`Complaint status updated to ${status} successfully!`);
+    } catch (error) {
+      console.error("Error updating complaint status:", error);
+      alert("Failed to update complaint status. Please try again.");
+    }
+  };
+
   const handleApproveComplaint = async (
     memberId: string,
     complaintId: string
@@ -1682,7 +1799,7 @@ const updateStats = () => {
       alert("Failed to approve complaint. Please try again.");
     }
   };
-  
+
   const handleDeleteComplaint = (memberId: string, complaintId: string) => {
     const complaint = complaints.find(
       (c) => c.id === complaintId && c.memberId === memberId
@@ -1695,8 +1812,8 @@ const updateStats = () => {
       }`
     );
   };
-  
- const handleUploadFile = async (memberId: string, complaintId: string) => {
+
+  const handleUploadFile = async (memberId: string, complaintId: string) => {
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;
@@ -1794,7 +1911,7 @@ const updateStats = () => {
       alert("Failed to add vehicle. Please try again.");
     }
   };
-  
+
   const handleUpdateVehicleStatus = async (
     memberId: string,
     vehicleId: string,
@@ -1852,7 +1969,7 @@ const updateStats = () => {
       console.error("Error fetching vehicle data:", error);
     }
   };
-  
+
   // Service Provider Functions
   const handleAddProvider = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1974,7 +2091,7 @@ const updateStats = () => {
       alert("Failed to update service provider status. Please try again.");
     }
   };
-  
+
   // Document Functions
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2040,7 +2157,7 @@ const updateStats = () => {
       `Document: ${document?.title || "Unknown"}`
     );
   };
-  
+
   // Committee Member Functions
   const handleAddCommitteeMember = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2125,50 +2242,49 @@ const updateStats = () => {
       `Committee Member: ${member?.name || "Unknown"}`
     );
   };
-  
+
   // Admin Functions
-const handleAddAdmin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsAddingAdmin(true);
+  const handleAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAddingAdmin(true);
 
-  try {
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
-      `${newAdmin.email}`,
-      "TempPassword123"
-    );
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        `${newAdmin.email}`,
+        "TempPassword123"
+      );
 
-    const user = userCredential.user;
+      const user = userCredential.user;
 
-    await setDoc(doc(db, "admins", user.uid), {
-      id: user.uid,
-      name: newAdmin.name,
-      email: newAdmin.email,
-      unitNumber: newAdmin.unitNumber, 
-      position: newAdmin.position,
-      createdAt: serverTimestamp(),
-      adminPosition: newAdmin.adminPosition,
-    });
+      await setDoc(doc(db, "admins", user.uid), {
+        id: user.uid,
+        name: newAdmin.name,
+        email: newAdmin.email,
+        unitNumber: newAdmin.unitNumber,
+        position: newAdmin.position,
+        createdAt: serverTimestamp(),
+        adminPosition: newAdmin.adminPosition,
+      });
 
-    setNewAdmin({
-      name: "",
-      email: "",
-      unitNumber: "",
-      position: "",
-      adminPosition: "",
-    });
+      setNewAdmin({
+        name: "",
+        email: "",
+        unitNumber: "",
+        position: "",
+        adminPosition: "",
+      });
 
-    setShowAddAdminPopup(false);
-    fetchAdmins();
+      setShowAddAdminPopup(false);
+      fetchAdmins();
 
-    alert("Admin added successfully! Username: " + newAdmin.unitNumber);
-  } catch (error: any) {
-    console.error("Error adding admin:", error);
-
-  } finally {
-    setIsAddingAdmin(false);
-  }
-};
+      alert("Admin added successfully! Username: " + newAdmin.unitNumber);
+    } catch (error: any) {
+      console.error("Error adding admin:", error);
+    } finally {
+      setIsAddingAdmin(false);
+    }
+  };
 
   const handleEditAdmin = (admin: Admin) => {
     setEditingAdmin(admin);
@@ -2216,7 +2332,7 @@ const handleAddAdmin = async (e: React.FormEvent) => {
     const admin = admins.find((a) => a.id === id);
     initiateDeletion("admin", id, `Admin: ${admin?.name || "Unknown"}`);
   };
-  
+
   // Suggestion Functions
   const handleUpdateSuggestionStatus = async (
     suggestionId: string,
@@ -2271,7 +2387,7 @@ const handleAddAdmin = async (e: React.FormEvent) => {
       }`
     );
   };
-  
+
   // Redevelopment Form Functions
   const handleUpdateFormStatus = async (
     formId: string,
@@ -2398,7 +2514,7 @@ const handleAddAdmin = async (e: React.FormEvent) => {
     rejected: redevelopmentForms.filter((form) => form.status === "rejected")
       .length,
   };
-  
+
   // Deletion Request Functions
   const createDeletionRequest = async (
     itemType: string,
@@ -2426,7 +2542,7 @@ const handleAddAdmin = async (e: React.FormEvent) => {
     }
   };
 
- const submitDeletionRequest = () => {
+  const submitDeletionRequest = () => {
     if (!pendingDeletion || !deleteReason.trim()) {
       alert("Please provide a reason for deletion.");
       return;
@@ -2444,71 +2560,198 @@ const handleAddAdmin = async (e: React.FormEvent) => {
     setPendingDeletion(null);
   };
 
- const handleDeletionRequest = async (requestId: string, approve: boolean) => {
+  // const handleDeletionRequest = async (requestId: string, approve: boolean) => {
+  //   try {
+  //     const requestRef = doc(db, "deletionRequests", requestId);
+  //     const requestDoc = await getDoc(requestRef);
+  //     const requestData = requestDoc.data() as DeletionRequest;
+
+  //     if (approve) {
+  //       switch (requestData.itemType) {
+  //         case "member":
+  //           await deleteDoc(doc(db, "members", requestData.itemId));
+  //           break;
+  //         case "testimonial":
+  //           await deleteDoc(doc(db, "testimonials", requestData.itemId));
+  //           break;
+  //         case "faq":
+  //           await deleteDoc(doc(db, "faqs", requestData.itemId));
+  //           break;
+  //         case "payment":
+  //           const [memberId, transactionId] = requestId.split("_");
+  //           const paymentRef = doc(db, "payments", memberId);
+
+  //           const paymentDoc = await getDoc(paymentRef);
+
+  //           if (paymentDoc.exists()) {
+  //             const paymentData = paymentDoc.data();
+
+  //             if (paymentData && paymentData[transactionId]) {
+  //               const updatedData = { ...paymentData };
+  //               delete updatedData[transactionId];
+
+  //               await setDoc(paymentRef, updatedData);
+  //             }
+  //           }
+  //           break;
+  //         case "vehicle":
+  //           const [mId, vehicleId] = requestId.split("_");
+
+  //           await deleteDoc(doc(db, "members", mId, "vehicles", vehicleId));
+  //           break;
+  //         case "committee":
+  //           await deleteDoc(doc(db, "committee", requestData.itemId));
+  //           break;
+  //         case "admin":
+  //           await deleteDoc(doc(db, "admins", requestData.itemId));
+  //           break;
+  //         case "serviceProvider":
+  //           await deleteDoc(doc(db, "serviceProviders", requestData.itemId));
+  //           break;
+  //         case "document":
+  //           await deleteDoc(doc(db, "documents", requestData.itemId));
+  //           break;
+  //       }
+  //     }
+
+  //     await updateDoc(requestRef, {
+  //       status: approve ? "approved" : "rejected",
+  //       reviewedBy: adminDetails?.name,
+  //       reviewedAt: serverTimestamp(),
+  //     });
+
+  //     fetchDeletionRequests();
+  //     fetchData();
+
+  //     alert(
+  //       `Deletion request ${approve ? "approved" : "rejected"} successfully!`
+  //     );
+  //   } catch (error) {
+  //     console.error("Error handling deletion request:", error);
+  //     alert("Failed to process deletion request. Please try again.");
+  //   }
+  // };
+
+  // Deletion approval Functions
+
+  const handleDeletionRequest = async (requestId: string, approve: boolean) => {
     try {
       const requestRef = doc(db, "deletionRequests", requestId);
       const requestDoc = await getDoc(requestRef);
+
+      if (!requestDoc.exists()) {
+        alert("Deletion request not found!");
+        return;
+      }
+
       const requestData = requestDoc.data() as DeletionRequest;
 
       if (approve) {
         switch (requestData.itemType) {
-          case "member":
-            await deleteDoc(doc(db, "members", requestData.itemId));
-            break;
           case "testimonial":
             await deleteDoc(doc(db, "testimonials", requestData.itemId));
             break;
+
           case "faq":
             await deleteDoc(doc(db, "faqs", requestData.itemId));
             break;
+
+          case "member":
+            await deleteDoc(doc(db, "members", requestData.itemId));
+            break;
+
           case "payment":
-          const [memberId, transactionId] = requestId.split("_");
-          const paymentRef = doc(db, "payments", memberId);
+            const [memberId, transactionId] = requestData.itemId.split("_");
+            const paymentRef = doc(db, "payments", memberId);
+            const paymentDoc = await getDoc(paymentRef);
 
-          const paymentDoc = await getDoc(paymentRef);
+            if (paymentDoc.exists()) {
+              const paymentData = paymentDoc.data();
+              if (paymentData && paymentData[transactionId]) {
+                const updatedData = { ...paymentData };
+                delete updatedData[transactionId];
 
-          if (paymentDoc.exists()) {
-            const paymentData = paymentDoc.data();
-
-            if (paymentData && paymentData[transactionId]) {
-              const updatedData = { ...paymentData };
-              delete updatedData[transactionId];
-
-              await setDoc(paymentRef, updatedData);
+                await setDoc(paymentRef, updatedData);
+              }
             }
-          }
-          break;
-          case "vehicle":
-          const [mId, vehicleId] = requestId.split("_");
+            break;
 
-          await deleteDoc(doc(db, "members", mId, "vehicles", vehicleId));
-          break;
+          case "vehicle":
+            const [memberIdForVehicle, vehicleId] =
+              requestData.itemId.split("_");
+            await deleteDoc(
+              doc(db, "members", memberIdForVehicle, "vehicles", vehicleId)
+            );
+            break;
+
+          case "complaint":
+            const [memberIdForComplaint, complaintId] =
+              requestData.itemId.split("_");
+            const complaintRef = doc(db, "complaints", memberIdForComplaint);
+            const complaintDoc = await getDoc(complaintRef);
+
+            if (complaintDoc.exists()) {
+              const complaintData = complaintDoc.data();
+              if (complaintData && complaintData[complaintId]) {
+                const updatedData = { ...complaintData };
+                delete updatedData[complaintId];
+
+                await setDoc(complaintRef, updatedData);
+              }
+            }
+            break;
+
+          case "query":
+            await deleteDoc(doc(db, "queries", requestData.itemId));
+            break;
+
           case "committee":
             await deleteDoc(doc(db, "committee", requestData.itemId));
             break;
+
           case "admin":
             await deleteDoc(doc(db, "admins", requestData.itemId));
             break;
+
           case "serviceProvider":
             await deleteDoc(doc(db, "serviceProviders", requestData.itemId));
             break;
+
           case "document":
             await deleteDoc(doc(db, "documents", requestData.itemId));
             break;
+
+          case "suggestion":
+            await deleteDoc(doc(db, "suggestions", requestData.itemId));
+            break;
+
+          default:
+            console.error(
+              "Unknown item type for deletion:",
+              requestData.itemType
+            );
+            alert("Error: Unknown item type for deletion");
+            return;
         }
+
+        // Refresh the data after deletion
+        fetchData();
       }
 
+      // Update the deletion request status
       await updateDoc(requestRef, {
         status: approve ? "approved" : "rejected",
         reviewedBy: adminDetails?.name,
         reviewedAt: serverTimestamp(),
       });
 
+      // Refresh deletion requests list
       fetchDeletionRequests();
-      fetchData(); 
 
       alert(
-        `Deletion request ${approve ? "approved" : "rejected"} successfully!`
+        `Deletion request ${
+          approve ? "approved and processed" : "rejected"
+        } successfully!`
       );
     } catch (error) {
       console.error("Error handling deletion request:", error);
@@ -2516,7 +2759,6 @@ const handleAddAdmin = async (e: React.FormEvent) => {
     }
   };
 
-// Deletion approval Functions
   const initiateDeletion = (
     itemType: string,
     itemId: string,
@@ -2532,7 +2774,7 @@ const handleAddAdmin = async (e: React.FormEvent) => {
     }
   };
 
- const handleDirectDeletion = async (itemType: string, itemId: string) => {
+  const handleDirectDeletion = async (itemType: string, itemId: string) => {
     try {
       switch (itemType) {
         case "testimonial":
@@ -2596,8 +2838,8 @@ const handleAddAdmin = async (e: React.FormEvent) => {
           await deleteDoc(doc(db, "documents", itemId));
           break;
         case "suggestion":
-  await deleteDoc(doc(db, "suggestions", itemId));
-  break;
+          await deleteDoc(doc(db, "suggestions", itemId));
+          break;
         default:
           console.error("Unknown item type for deletion:", itemType);
           return;
@@ -2609,85 +2851,104 @@ const handleAddAdmin = async (e: React.FormEvent) => {
       console.error("Error deleting item:", error);
       alert("Failed to delete item. Please try again.");
     }
-  }; 
+  };
 
   // Chat Functions
 
-// ==============================
-// UNREAD MESSAGES FUNCTIONALITY
-// ==============================
+  // ==============================
+  // UNREAD MESSAGES FUNCTIONALITY
+  // ==============================
 
-// Add this useEffect to calculate unread messages when complaints or user changes
-useEffect(() => {
-  const calculateUnreadMessages = async () => {
+  // Add this useEffect to calculate unread messages when complaints or user changes
+  useEffect(() => {
+    const calculateUnreadMessages = async () => {
+      if (!user || complaints.length === 0) return;
+
+      const newUnreadCounts: { [key: string]: number } = {};
+
+      for (const complaint of complaints) {
+        try {
+          const chatRef = collection(
+            db,
+            "complaintChats",
+            complaint.id,
+            "messages"
+          );
+          const q = query(
+            chatRef,
+            where("sender", "==", "member"),
+            orderBy("timestamp", "asc")
+          );
+
+          const snapshot = await getDocs(q);
+          const unreadMessages = snapshot.docs.filter((doc) => {
+            const messageData = doc.data() as ChatMessage;
+            // Count messages from members that haven't been read by current admin
+            return (
+              messageData.sender === "member" &&
+              (!messageData.readBy || !messageData.readBy.includes(user.uid))
+            );
+          });
+
+          newUnreadCounts[complaint.id] = unreadMessages.length;
+        } catch (error) {
+          console.error(
+            `Error loading unread counts for complaint ${complaint.id}:`,
+            error
+          );
+          newUnreadCounts[complaint.id] = 0;
+        }
+      }
+
+      setUnreadMessageCounts(newUnreadCounts);
+    };
+
+    calculateUnreadMessages();
+  }, [complaints, user]);
+
+  // Add real-time listener for new messages
+  useEffect(() => {
     if (!user || complaints.length === 0) return;
-    
-    const newUnreadCounts: { [key: string]: number } = {};
-    
-    for (const complaint of complaints) {
-      try {
-        const chatRef = collection(db, "complaintChats", complaint.id, "messages");
-        const q = query(
-          chatRef, 
-          where("sender", "==", "member"),
-          orderBy("timestamp", "asc")
-        );
-        
-        const snapshot = await getDocs(q);
-        const unreadMessages = snapshot.docs.filter(doc => {
-          const messageData = doc.data() as ChatMessage;
-          // Count messages from members that haven't been read by current admin
-          return messageData.sender === "member" && 
-                 (!messageData.readBy || !messageData.readBy.includes(user.uid));
-        });
-        
-        newUnreadCounts[complaint.id] = unreadMessages.length;
-      } catch (error) {
-        console.error(`Error loading unread counts for complaint ${complaint.id}:`, error);
-        newUnreadCounts[complaint.id] = 0;
-      }
-    }
-    
-    setUnreadMessageCounts(newUnreadCounts);
-  };
 
-  calculateUnreadMessages();
-}, [complaints, user]);
+    const unsubscribeListeners: (() => void)[] = [];
 
-// Add real-time listener for new messages
-useEffect(() => {
-  if (!user || complaints.length === 0) return;
+    complaints.forEach((complaint) => {
+      const chatRef = collection(
+        db,
+        "complaintChats",
+        complaint.id,
+        "messages"
+      );
+      const q = query(
+        chatRef,
+        where("sender", "==", "member"),
+        orderBy("timestamp", "asc")
+      );
 
-  const unsubscribeListeners: (() => void)[] = [];
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const newMessages = snapshot
+          .docChanges()
+          .filter((change) => change.type === "added")
+          .map(
+            (change) =>
+              ({ id: change.doc.id, ...change.doc.data() } as ChatMessage)
+          );
 
-  complaints.forEach(complaint => {
-    const chatRef = collection(db, "complaintChats", complaint.id, "messages");
-    const q = query(
-      chatRef,
-      where("sender", "==", "member"),
-      orderBy("timestamp", "asc")
-    );
+        if (newMessages.length > 0) {
+          setUnreadMessageCounts((prev) => ({
+            ...prev,
+            [complaint.id]: (prev[complaint.id] || 0) + newMessages.length,
+          }));
+        }
+      });
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newMessages = snapshot.docChanges()
-        .filter(change => change.type === 'added')
-        .map(change => ({ id: change.doc.id, ...change.doc.data() } as ChatMessage));
-
-      if (newMessages.length > 0) {
-        setUnreadMessageCounts(prev => ({
-          ...prev,
-          [complaint.id]: (prev[complaint.id] || 0) + newMessages.length
-        }));
-      }
+      unsubscribeListeners.push(unsubscribe);
     });
 
-    unsubscribeListeners.push(unsubscribe);
-  });
-
-  return () => {
-    unsubscribeListeners.forEach(unsubscribe => unsubscribe());
-  };
-}, [complaints, user]);
+    return () => {
+      unsubscribeListeners.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [complaints, user]);
 
   const handleOpenChat = async (complaintId: string, memberId: string) => {
     setSelectedComplaintChat(complaintId);
@@ -2708,7 +2969,7 @@ useEffect(() => {
 
     return () => unsubscribe();
   };
-  
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedComplaintChat || !newMessage.trim() || !user) return;
@@ -2737,14 +2998,14 @@ useEffect(() => {
       alert("Error sending message. Please try again.");
     }
   };
-  
+
   const markMessagesAsRead = async (complaintId: string) => {
     if (!user) return;
 
     try {
       const chatRef = collection(db, "complaintChats", complaintId, "messages");
       const q = query(
-        chatRef, 
+        chatRef,
         where("sender", "==", "member"),
         where("readBy", "not-in", [[user.uid]])
       );
@@ -2762,7 +3023,7 @@ useEffect(() => {
       await batch.commit();
 
       // Update the unread count to zero for this complaint
-      setUnreadMessageCounts(prev => ({
+      setUnreadMessageCounts((prev) => ({
         ...prev,
         [complaintId]: 0,
       }));
@@ -2772,7 +3033,7 @@ useEffect(() => {
   };
 
   // Contact Form Functions
- const handleContactSubmit = async (e: React.FormEvent) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setContactError("");
     setContactSuccess("");
@@ -2827,7 +3088,7 @@ useEffect(() => {
   };
 
   // Authentication Functions
- const handleLogout = async () => {
+  const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
       await signOut(auth);
@@ -2839,17 +3100,17 @@ useEffect(() => {
     }
   };
 
-// ==============================
-// USE EFFECT HOOKS
-// ==============================
-  
+  // ==============================
+  // USE EFFECT HOOKS
+  // ==============================
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         const docRef = doc(db, "admins", firebaseUser.uid);
         const docSnap = await getDoc(docRef);
-        
+
         if (docSnap.exists()) {
           setIsAdmin(true);
           setAdminDetails(docSnap.data());
@@ -2861,7 +3122,7 @@ useEffect(() => {
         router.push("/");
       }
     });
-    
+
     return () => unsubscribe();
   }, [router]);
 
@@ -2873,21 +3134,25 @@ useEffect(() => {
 
   useEffect(() => {
     let filtered = payments;
-    
+
     if (paymentStatusFilter !== "all") {
-      filtered = filtered.filter((payment) => payment.status === paymentStatusFilter);
+      filtered = filtered.filter(
+        (payment) => payment.status === paymentStatusFilter
+      );
     }
-    
+
     if (paymentTypeFilter !== "all") {
-      filtered = filtered.filter((payment) => payment.type === paymentTypeFilter);
+      filtered = filtered.filter(
+        (payment) => payment.type === paymentTypeFilter
+      );
     }
-    
+
     setFilteredPayments(filtered);
   }, [payments, paymentStatusFilter, paymentTypeFilter]);
 
-// ==============================
-// FILTERED DATA CALCULATIONS
-// ==============================
+  // ==============================
+  // FILTERED DATA CALCULATIONS
+  // ==============================
 
   const extractWingAndFlat = (unitNumber: string) => {
     if (!unitNumber) return { wing: "", flatNumber: "" };
@@ -2896,19 +3161,29 @@ useEffect(() => {
     return { wing, flatNumber };
   };
 
-const filteredMembers = members.filter((member) => {
+  const filteredMembers = members.filter((member) => {
     const { wing, flatNumber } = extractWingAndFlat(member.unitNumber);
-    const matchesSearch = member.name.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
-      member.unitNumber.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+    const matchesSearch =
+      member.name.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+      member.unitNumber
+        .toLowerCase()
+        .includes(memberSearchTerm.toLowerCase()) ||
       member.email.toLowerCase().includes(memberSearchTerm.toLowerCase());
     const matchesWing = wingFilter === "all" || wing === wingFilter;
-    const matchesFlat = flatNumberFilter === "all" || flatNumber === flatNumberFilter;
-    
+    const matchesFlat =
+      flatNumberFilter === "all" || flatNumber === flatNumberFilter;
+
     return matchesSearch && matchesWing && matchesFlat;
   });
 
-  const uniqueWings = Array.from(new Set(members.map((member) => extractWingAndFlat(member.unitNumber).wing))).filter((wing) => wing !== "");
-  const uniqueFlatNumbers = Array.from(new Set(members.map((member) => extractWingAndFlat(member.unitNumber).flatNumber))).filter((flat) => flat !== "");
+  const uniqueWings = Array.from(
+    new Set(members.map((member) => extractWingAndFlat(member.unitNumber).wing))
+  ).filter((wing) => wing !== "");
+  const uniqueFlatNumbers = Array.from(
+    new Set(
+      members.map((member) => extractWingAndFlat(member.unitNumber).flatNumber)
+    )
+  ).filter((flat) => flat !== "");
 
   const extractWingFromUnit = (unitNumber: string) => {
     if (!unitNumber) return "";
@@ -2919,7 +3194,7 @@ const filteredMembers = members.filter((member) => {
     if (!unitNumber) return "";
     return unitNumber.substring(1);
   };
-  
+
   const filteredVehicles = vehicles
     .filter((vehicle: any) => {
       if (vehicleFilter === "all") return true;
@@ -2930,27 +3205,42 @@ const filteredMembers = members.filter((member) => {
     .filter((vehicle: any) => {
       const wing = extractWingFromUnit(vehicle.memberUnit);
       const flat = extractFlatFromUnit(vehicle.memberUnit);
-      const matchesWing = vehicleWingFilter === "all" || wing === vehicleWingFilter;
-      const matchesFlat = vehicleFlatFilter === "all" || flat === vehicleFlatFilter;
-      
+      const matchesWing =
+        vehicleWingFilter === "all" || wing === vehicleWingFilter;
+      const matchesFlat =
+        vehicleFlatFilter === "all" || flat === vehicleFlatFilter;
+
       return matchesWing && matchesFlat;
     });
 
-  const uniqueVehicleWings = Array.from(new Set(vehicles.map((vehicle: any) => extractWingFromUnit(vehicle.memberUnit)))).filter((wing) => wing !== "");
-  const uniqueVehicleFlats = Array.from(new Set(vehicles.map((vehicle: any) => extractFlatFromUnit(vehicle.memberUnit)))).filter((flat) => flat !== "");
+  const uniqueVehicleWings = Array.from(
+    new Set(
+      vehicles.map((vehicle: any) => extractWingFromUnit(vehicle.memberUnit))
+    )
+  ).filter((wing) => wing !== "");
+  const uniqueVehicleFlats = Array.from(
+    new Set(
+      vehicles.map((vehicle: any) => extractFlatFromUnit(vehicle.memberUnit))
+    )
+  ).filter((flat) => flat !== "");
 
   const filteredForms = redevelopmentForms.filter((form) => {
-    const matchesSearch = form.name.toLowerCase().includes(redevelopmentSearchTerm.toLowerCase()) ||
-      form.userUnit.toLowerCase().includes(redevelopmentSearchTerm.toLowerCase()) ||
+    const matchesSearch =
+      form.name.toLowerCase().includes(redevelopmentSearchTerm.toLowerCase()) ||
+      form.userUnit
+        .toLowerCase()
+        .includes(redevelopmentSearchTerm.toLowerCase()) ||
       form.email.toLowerCase().includes(redevelopmentSearchTerm.toLowerCase());
-    const matchesStatus = redevelopmentStatusFilter === "all" || form.status === redevelopmentStatusFilter;
-    
+    const matchesStatus =
+      redevelopmentStatusFilter === "all" ||
+      form.status === redevelopmentStatusFilter;
+
     return matchesSearch && matchesStatus;
   });
 
-// ==============================
-// RENDER FUNCTIONS
-// ==============================
+  // ==============================
+  // RENDER FUNCTIONS
+  // ==============================
 
   if (!isAdmin) {
     return (
@@ -2974,10 +3264,10 @@ const filteredMembers = members.filter((member) => {
     );
   }
 
-// ==============================
-// MAIN COMPONENT RENDER
-// ==============================
- return (
+  // ==============================
+  // MAIN COMPONENT RENDER
+  // ==============================
+  return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Mobile menu button */}
       <div className="md:hidden bg-gray-900 p-4 flex justify-between items-center">
@@ -4490,20 +4780,23 @@ const filteredMembers = members.filter((member) => {
                       />
                     </div>
                     <div>
-  <label className="block text-sm font-medium text-gray-700 mb-1">
-    Unit Number <span className="text-red-500">*</span>
-  </label>
-  <input
-    type="text"
-    required
-    value={newAdmin.unitNumber}
-    onChange={(e) =>
-      setNewAdmin({ ...newAdmin, unitNumber: e.target.value })
-    }
-    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-    placeholder="Add 'A' before your unit number (Eg. AC301)"
-  />
-</div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Unit Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newAdmin.unitNumber}
+                        onChange={(e) =>
+                          setNewAdmin({
+                            ...newAdmin,
+                            unitNumber: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Add 'A' before your unit number (Eg. AC301)"
+                      />
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Society Position
@@ -7256,6 +7549,15 @@ const filteredMembers = members.filter((member) => {
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {filteredPayments.map((payment) => {
+                        // Try to find member name from local members data if missing
+                        const memberInfo = members.find(
+                          (m) => m.id === payment.memberId
+                        );
+                        const displayName =
+                          payment.memberName !== "Unknown Member"
+                            ? payment.memberName
+                            : memberInfo?.name || "Unknown Member";
+
                         return (
                           <tr
                             key={payment.id}
@@ -7265,12 +7567,12 @@ const filteredMembers = members.filter((member) => {
                               <div className="flex items-center">
                                 <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
                                   <span className="font-medium text-blue-700">
-                                    {payment.memberName?.charAt(0) || "U"}
+                                    {displayName?.charAt(0) || "U"}
                                   </span>
                                 </div>
                                 <div>
                                   <div className="text-sm font-medium text-gray-900">
-                                    {payment.memberName}
+                                    {displayName}
                                   </div>
                                 </div>
                               </div>
@@ -8793,7 +9095,6 @@ const filteredMembers = members.filter((member) => {
                               ? formatDateTime(msg.timestamp)
                               : "Sending..."}
                           </p>
-
                         </div>
                       </div>
                     ))
