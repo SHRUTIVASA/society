@@ -1516,7 +1516,7 @@ export default function AdminDashboard() {
   };
 
   const handleReplyToQuery = (email: string, name: string) => {
-    const subject = `Re: Your query for Yesh Krupa Society`;
+    const subject = `Re: Your query for YeshKrupa Society`;
     window.location.href = `mailto:${email}?subject=${encodeURIComponent(
       subject
     )}`;
@@ -9154,7 +9154,7 @@ export default function AdminDashboard() {
                     </svg>
                   </div>
                   <h3 className="text-xl font-bold text-gray-800">
-                    Yesh Krupa Society
+                    YeshKrupa Society
                   </h3>
                 </div>
                 <p className="text-gray-600 text-m leading-relaxed mb-6">
@@ -9240,7 +9240,7 @@ export default function AdminDashboard() {
             <div className="border-t border-gray-300 mt-12 pt-6 flex flex-col md:flex-row justify-between items-center">
               <div className="mb-4 md:mb-0">
                 <p className="text-gray-600 text-sm">
-                  © 2003 - {new Date().getFullYear()} Yesh Krupa Society. All
+                  © 2003 - {new Date().getFullYear()} YeshKrupa Society. All
                   rights reserved.
                 </p>
               </div>
@@ -9434,7 +9434,7 @@ export default function AdminDashboard() {
 
             <div className="mb-4">
               <p className="text-gray-600 mb-2">
-                <strong>Yesh Krupa Society</strong>
+                <strong>YeshKrupa Society</strong>
                 <br />
                 Chikuwadi, Shimpoli Road, Borivali West, Mumbai, Maharashtra
                 400092
@@ -9450,7 +9450,7 @@ export default function AdminDashboard() {
                 allowFullScreen
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
-                title="Yesh Krupa Society Location"
+                title="YeshKrupa Society Location"
               ></iframe>
             </div>
           </div>

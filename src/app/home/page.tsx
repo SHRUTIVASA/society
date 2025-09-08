@@ -386,7 +386,7 @@ const handleForgotPassword = async (e: React.FormEvent) => {
         <title>YeshKrupa Society Management</title>
         <meta
           name="description"
-          content="Yesh Krupa society management portal"
+          content="YeshKrupa society management portal"
         />
         <link rel="icon" href="/favicon.ico" />
       </Head>

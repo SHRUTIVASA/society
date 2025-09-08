@@ -14,9 +14,9 @@ const generatePDF = async (bylawsContent: any, sections: any) => {
 
   // Set properties
   doc.setProperties({
-    title: "Yesh Krupa Society Bylaws",
+    title: "YeshKrupa Society Bylaws",
     subject: "Official bylaws document",
-    author: "Yesh Krupa Society",
+    author: "YeshKrupa Society",
   });
 
   let yPosition = 20;
@@ -27,7 +27,7 @@ const generatePDF = async (bylawsContent: any, sections: any) => {
   // Add logo/header
   doc.setFontSize(20);
   doc.setTextColor(21, 34, 56); // #152238
-  doc.text("Yesh Krupa Society", margin, 15);
+  doc.text("YeshKrupa Society", margin, 15);
   doc.setFontSize(16);
   doc.text("Official Bylaws", margin, 25);
 
@@ -98,7 +98,7 @@ const generatePDF = async (bylawsContent: any, sections: any) => {
       { align: "center" }
     );
     doc.text(
-      "Yesh Krupa Society Bylaws",
+      "YeshKrupa Society Bylaws",
       margin,
       doc.internal.pageSize.height - 10
     );
@@ -198,11 +198,11 @@ export default function Bylaws() {
       content: [
         {
           title: "Name and Location",
-          text: "The name of the society shall be Yesh Krupa Society, located at Chikuwadi, Shimpoli Road, Borivali West, Mumbai, Maharashtra.",
+          text: "The name of the society shall be YeshKrupa Society, located at Chikuwadi, Shimpoli Road, Borivali West, Mumbai, Maharashtra.",
         },
         {
           title: "Definitions",
-          text: "In these bylaws, unless the context otherwise requires: 'Society' means Yesh Krupa Society; 'Member' means a person who owns a flat in the society; 'Committee' means the managing committee of the society; 'Flat' means an apartment in the society building.",
+          text: "In these bylaws, unless the context otherwise requires: 'Society' means YeshKrupa Society; 'Member' means a person who owns a flat in the society; 'Committee' means the managing committee of the society; 'Flat' means an apartment in the society building.",
         },
         {
           title: "Objectives",
@@ -331,8 +331,8 @@ export default function Bylaws() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Head>
-        <title>Yesh Krupa Society - Bylaws</title>
-        <meta name="description" content="Yesh Krupa Society Bylaws" />
+        <title>YeshKrupa Society - Bylaws</title>
+        <meta name="description" content="YeshKrupa Society Bylaws" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
@@ -358,7 +358,7 @@ export default function Bylaws() {
             </Link>
           </div>
           <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-wide">
-            Yesh Krupa Society
+            YeshKrupa Society
           </h1>
         </div>
 
@@ -404,7 +404,7 @@ export default function Bylaws() {
 
             <div className="mb-4">
               <p className="text-gray-600 mb-2">
-                <strong>Yesh Krupa Society</strong>
+                <strong>YeshKrupa Society</strong>
                 <br />
                 Chikuwadi, Shimpoli Road, Borivali West, Mumbai, Maharashtra
                 400092
@@ -420,7 +420,7 @@ export default function Bylaws() {
                 allowFullScreen
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
-                title="Yesh Krupa Society Location"
+                title="YeshKrupa Society Location"
               ></iframe>
             </div>
           </div>
@@ -787,7 +787,7 @@ export default function Bylaws() {
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-gray-800">
-                  Yesh Krupa Society
+                  YeshKrupa Society
                 </h3>
               </div>
               <p className="text-gray-600 text-m leading-relaxed mb-6">
@@ -873,7 +873,7 @@ export default function Bylaws() {
           <div className="border-t border-gray-300 mt-12 pt-6 flex flex-col md:flex-row justify-between items-center">
             <div className="mb-4 md:mb-0">
               <p className="text-gray-600 text-sm">
-                © 2003 - {new Date().getFullYear()} Yesh Krupa Society. All
+                © 2003 - {new Date().getFullYear()} YeshKrupa Society. All
                 rights reserved.
               </p>
             </div>

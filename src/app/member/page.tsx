@@ -2142,7 +2142,7 @@ export default function MemberDashboard() {
             {userData?.name?.charAt(0) || "M"}
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-800">Yesh Krupa</h1>
+            <h1 className="text-lg font-bold text-gray-800">YeshKrupa</h1>
             <p className="text-xs text-gray-600">Member Portal</p>
           </div>
         </div>

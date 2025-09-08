@@ -265,8 +265,8 @@ export default function Calendar() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Head>
-        <title>Events Calendar - Yesh Krupa Society</title>
-        <meta name="description" content="Yesh Krupa society events calendar" />
+        <title>Events Calendar - YeshKrupa Society</title>
+        <meta name="description" content="YeshKrupa society events calendar" />
       </Head>
 
       {/* Loading Overlay */}
@@ -555,7 +555,7 @@ export default function Calendar() {
 
             <div className="mb-4">
               <p className="text-gray-600 mb-2">
-                <strong>Yesh Krupa Society</strong>
+                <strong>YeshKrupa Society</strong>
                 <br />
                 Chikuwadi, Shimpoli Road, Borivali West, Mumbai, Maharashtra
                 400092
@@ -571,7 +571,7 @@ export default function Calendar() {
                 allowFullScreen
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
-                title="Yesh Krupa Society Location"
+                title="YeshKrupa Society Location"
               ></iframe>
             </div>
           </div>
@@ -610,7 +610,7 @@ export default function Calendar() {
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-gray-800">
-                  Yesh Krupa Society
+                  YeshKrupa Society
                 </h3>
               </div>
               <p className="text-gray-600 text-m leading-relaxed mb-6">
@@ -696,7 +696,7 @@ export default function Calendar() {
           <div className="border-t border-gray-300 mt-12 pt-6 flex flex-col md:flex-row justify-between items-center">
             <div className="mb-4 md:mb-0">
               <p className="text-gray-600 text-sm">
-                © 2003 - {new Date().getFullYear()} Yesh Krupa Society. All
+                © 2003 - {new Date().getFullYear()} YeshKrupa Society. All
                 rights reserved.
               </p>
             </div>
