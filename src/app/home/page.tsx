@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import {
@@ -14,7 +13,6 @@ import {
   serverTimestamp,
   getDocs,
   query,
-  orderBy,
   limit,
   where,
   Timestamp,
@@ -195,64 +193,66 @@ const handleForgotPassword = async (e: React.FormEvent) => {
     };
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setIsLoading(true);
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError("");
+  setIsLoading(true);
 
-    try {
-      const adminsQuery = query(
-        collection(db, "admins"),
-        where("unitNumber", "==", email)
-      );
+  try {
+    // First, check if the unitNumber exists in either admins or members collection
+    const adminsQuery = query(
+      collection(db, "admins"),
+      where("unitNumber", "==", email) // Using email field for unitNumber input
+    );
+    
+    const membersQuery = query(
+      collection(db, "members"),
+      where("unitNumber", "==", email) // Using email field for unitNumber input
+    );
 
-      const membersQuery = query(
-        collection(db, "members"),
-        where("unitNumber", "==", email)
-      );
+    const [adminsSnapshot, membersSnapshot] = await Promise.all([
+      getDocs(adminsQuery),
+      getDocs(membersQuery)
+    ]);
 
-      const [adminsSnapshot, membersSnapshot] = await Promise.all([
-        getDocs(adminsQuery),
-        getDocs(membersQuery),
-      ]);
+    let userEmail = "";
+    let isAdmin = false;
 
-      let userEmail = "";
-      let isAdmin = false;
-
-      if (!adminsSnapshot.empty) {
-        const adminDoc = adminsSnapshot.docs[0];
-        userEmail = adminDoc.data().email;
-        isAdmin = true;
-      } else if (!membersSnapshot.empty) {
-        const memberDoc = membersSnapshot.docs[0];
-        userEmail = memberDoc.data().email;
-        isAdmin = false;
-      } else {
-        setError("Invalid unit number or password");
-        setIsLoading(false);
-        return;
-      }
-
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        userEmail,
-        password
-      );
-      
-      const user = userCredential.user;
-      setIsLoggedIn(true);
-
-      if (isAdmin) {
-        router.push("/admin");
-      } else {
-        router.push("/member");
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
+    // Check if unitNumber exists in admins collection
+    if (!adminsSnapshot.empty) {
+      const adminDoc = adminsSnapshot.docs[0];
+      userEmail = adminDoc.data().email;
+      isAdmin = true;
+    } 
+    // Check if unitNumber exists in members collection
+    else if (!membersSnapshot.empty) {
+      const memberDoc = membersSnapshot.docs[0];
+      userEmail = memberDoc.data().email;
+      isAdmin = false;
+    } 
+    // If unitNumber not found in either collection
+    else {
+      setError("Invalid unit number or password");
       setIsLoading(false);
+      return;
     }
-  };
+
+    // Now sign in with the email found in the document
+    const userCredential = await signInWithEmailAndPassword(auth, userEmail, password);
+    const user = userCredential.user;
+    setIsLoggedIn(true);
+
+    if (isAdmin) {
+      router.push("/admin");
+    } else {
+      router.push("/member");
+    }
+  } catch (err: any) {
+    setError(err.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   useEffect(() => {
     const fetchPreviewTestimonials = async () => {
@@ -391,25 +391,6 @@ const handleForgotPassword = async (e: React.FormEvent) => {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      {/* <nav className="bg-white shadow-md py-4 px-6 flex justify-between items-center">
-        <div className="flex items-center">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold mr-3">
-            YK
-          </div>
-          <h1 className="text-xl font-semibold text-gray-800">YeshKrupa Society</h1>
-        </div>
-        
-        {isMobile && (
-          <button 
-            onClick={() => setShowLoginModal(true)}
-            className="p-2 rounded-full bg-blue-100 text-blue-600"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-            </svg>
-          </button>
-        )}
-      </nav> */}
       <nav className="bg-[#152238] py-3 px-8 flex justify-between items-center">
         <div className="flex items-center">
           <div className="w-12 h-12 bg-[#b9c7e2] rounded-full flex items-center justify-center text-black text-xl font-bold mr-3">
@@ -916,18 +897,18 @@ const handleForgotPassword = async (e: React.FormEvent) => {
                       className="block text-gray-700 text-sm font-medium mb-2"
                       htmlFor="mobile-email"
                     >
-                      Email
+                      Username
                     </label>
                     <input
-                      id="mobile-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                      placeholder="Enter your email"
-                      required
-                      disabled={isLoading}
-                    />
+                    id="email"
+                    type="text"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                    placeholder="Enter your unit number"
+                    required
+                    disabled={isLoading}
+                  />
                   </div>
                   <div className="mb-6">
                     <label

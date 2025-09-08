@@ -289,7 +289,7 @@ interface CommitteeMember {
 }
 
 export default function MemberDashboard() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
