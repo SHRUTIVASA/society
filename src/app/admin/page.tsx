@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import {
   collection,
@@ -217,6 +217,10 @@ interface Document {
   category: "document" | "notice";
 }
 
+interface DocumentForm extends Document {
+  file?: File | null;
+}
+
 interface CommitteeMember {
   id: string;
   name: string;
@@ -259,6 +263,93 @@ interface ChatMessage {
   timestamp: Timestamp;
   readBy?: string[];
 }
+
+interface User {
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+}
+
+// interface AdminDetails {
+//   id: string;
+//   name: string;
+//   email: string;
+//   unitNumber: string;
+//   position: string;
+//   adminPosition: string;
+// }
+
+// interface PaymentData {
+//   memberId: string;
+//   amount: string;
+//   dueDate: string;
+//   type: string;
+//   status: string;
+// }
+
+// interface FAQData {
+//   question: string;
+//   answer: string;
+// }
+
+// interface ServiceProviderData {
+//   name: string;
+//   role: string;
+//   phone: string;
+//   email: string;
+//   address: string;
+//   monthlySalary: string;
+//   joiningDate: string;
+//   isActive: boolean;
+//   documents: {
+//     aadhaar: string;
+//     pan: string;
+//     contract: string;
+//   };
+// }
+
+// interface VehicleData {
+//   type: string;
+//   model: string;
+//   numberPlate: string;
+//   parking: boolean;
+//   startDate: string;
+//   endDate: string;
+//   isCurrent: boolean;
+//   rcBookNumber: string;
+// }
+
+// interface CommitteeMemberData {
+//   name: string;
+//   email: string;
+//   phone: string;
+//   position: string;
+//   description: string;
+// }
+
+// interface AdminData {
+//   name: string;
+//   email: string;
+//   unitNumber: string;
+//   position: string;
+//   adminPosition: string;
+// }
+
+// interface DocumentData {
+//   title: string;
+//   description: string;
+//   file: File | null;
+//   category: "document" | "notice";
+//   isPublic: boolean;
+// }
+
+interface TimestampLike {
+  toDate?: () => Date;
+  seconds?: number;
+  nanoseconds?: number;
+}
+
+type TimestampInput = Date | Timestamp | TimestampLike | string | number;
 
 // ==============================
 // ICON COMPONENTS
@@ -578,7 +669,7 @@ const ServiceProviderIcon = () => (
 // UTILITY FUNCTIONS
 // ==============================
 
-const formatDateTime = (timestamp: any): string => {
+const formatDateTime = (timestamp: TimestampInput): string => {
   if (!timestamp) return "N/A";
 
   let date: Date;
@@ -587,18 +678,22 @@ const formatDateTime = (timestamp: any): string => {
     // Handle different timestamp formats
     if (timestamp instanceof Date) {
       date = timestamp;
-    } else if (timestamp && typeof timestamp.toDate === "function") {
+    } else if (
+      timestamp &&
+      typeof (timestamp as Timestamp).toDate === "function"
+    ) {
       // Firestore Timestamp
-      date = timestamp.toDate();
+      date = (timestamp as Timestamp).toDate();
     } else if (typeof timestamp === "string") {
       // ISO string
       date = new Date(timestamp);
     } else if (typeof timestamp === "number") {
       // Unix timestamp
       date = new Date(timestamp);
-    } else if (timestamp && timestamp.seconds) {
+    } else if (timestamp && (timestamp as TimestampLike).seconds) {
       // Firestore Timestamp with seconds property
-      date = new Date(timestamp.seconds * 1000);
+      const ts = timestamp as TimestampLike;
+      date = new Date((ts.seconds || 0) * 1000);
     } else {
       return "N/A";
     }
@@ -619,7 +714,9 @@ const formatDateTime = (timestamp: any): string => {
   }
 };
 
-const formatDateToDDMMYYYY = (timestamp: any): string => {
+const formatDateToDDMMYYYY = (
+  timestamp: TimestampInput | null | undefined
+): string => {
   if (!timestamp) return "N/A";
 
   let date: Date;
@@ -627,14 +724,18 @@ const formatDateToDDMMYYYY = (timestamp: any): string => {
   try {
     if (timestamp instanceof Date) {
       date = timestamp;
-    } else if (timestamp && typeof timestamp.toDate === "function") {
-      date = timestamp.toDate();
+    } else if (
+      timestamp &&
+      typeof (timestamp as Timestamp).toDate === "function"
+    ) {
+      date = (timestamp as Timestamp).toDate();
     } else if (typeof timestamp === "string") {
       date = new Date(timestamp);
     } else if (typeof timestamp === "number") {
       date = new Date(timestamp);
-    } else if (timestamp && timestamp.seconds) {
-      date = new Date(timestamp.seconds * 1000);
+    } else if (timestamp && (timestamp as TimestampLike).seconds) {
+      const ts = timestamp as TimestampLike;
+      date = new Date((ts.seconds || 0) * 1000);
     } else {
       return "N/A";
     }
@@ -652,6 +753,23 @@ const formatDateToDDMMYYYY = (timestamp: any): string => {
   }
 };
 
+const timestampWithDateAndCurrentTime = (dateString: string): Timestamp => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const now = new Date();
+
+  const dateWithTime = new Date(
+    year,
+    month - 1,
+    day,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+
+  return Timestamp.fromDate(dateWithTime);
+};
+
 // ==============================
 // MAIN COMPONENT
 // ==============================
@@ -664,9 +782,9 @@ export default function AdminDashboard() {
   // ==============================
 
   // Authentication & User State
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [adminDetails, setAdminDetails] = useState<any>(null);
+  const [adminDetails, setAdminDetails] = useState<Admin | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // UI State
@@ -737,27 +855,38 @@ export default function AdminDashboard() {
     memberSince: "",
   });
 
-  const [newPayment, setNewPayment] = useState({
-    memberId: "",
-    amount: "",
-    dueDate: "",
-    type: "Maintenance",
+  const [newPayment, setNewPayment] = useState<Payment>({
+    id: "",
+    amount: 0,
+    dueDate: Timestamp.now(),
+    paidDate: Timestamp.now(),
     status: "pending",
+    transactionId: "",
+    type: "Maintenance",
+    memberId: "",
+    memberName: "",
   });
 
-  const [newFAQ, setNewFAQ] = useState({
+  const [newFAQ, setNewFAQ] = useState<FAQ>({
+    id: "",
     question: "",
     answer: "",
+    order: 0,
   });
 
-  const [newProvider, setNewProvider] = useState({
+  type ServiceProviderForm = Omit<
+    ServiceProvider,
+    "id" | "createdAt" | "updatedAt"
+  > & { id?: string };
+
+  const [newProvider, setNewProvider] = useState<ServiceProviderForm>({
     name: "",
     role: "Watchman",
     phone: "",
     email: "",
     address: "",
-    monthlySalary: "",
-    joiningDate: new Date().toISOString().split("T")[0],
+    monthlySalary: 0,
+    joiningDate: Timestamp.now(),
     isActive: true,
     documents: {
       aadhaar: "",
@@ -766,41 +895,53 @@ export default function AdminDashboard() {
     },
   });
 
-  const [newVehicle, setNewVehicle] = useState({
+  const [newVehicle, setNewVehicle] = useState<Vehicle>({
     type: "Car",
     model: "",
     numberPlate: "",
     parking: false,
-    startDate: new Date().toISOString().split("T")[0],
-    endDate: "",
+    startDate: Timestamp.now(),
+    endDate: undefined,
     isCurrent: true,
     rcBookNumber: "",
   });
 
-  const [newCommitteeMember, setNewCommitteeMember] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    position: "",
-    description: "",
-  });
+  type CommitteeMemberForm = Omit<CommitteeMember, "id"> & { id?: string };
 
-  const [newAdmin, setNewAdmin] = useState({
+  const [newCommitteeMember, setNewCommitteeMember] =
+    useState<CommitteeMemberForm>({
+      name: "",
+      email: "",
+      phone: "",
+      position: "",
+      description: "",
+    });
+
+  type AdminForm = Omit<Admin, "id"> & { id?: string };
+
+  const [newAdmin, setNewAdmin] = useState<AdminForm>({
     name: "",
     email: "",
     unitNumber: "",
     position: "",
-    //password: "",
     adminPosition: "",
   });
-
-  const [newDocument, setNewDocument] = useState({
+  const [newDocument, setNewDocument] = useState<DocumentForm>({
+    id: "",
     title: "",
     description: "",
-    file: null as File | null,
-    category: "document" as "document" | "notice",
+    fileUrl: "",
+    fileName: "",
+    fileType: "",
+    fileSize: 0,
     isPublic: false,
+    uploadedBy: "",
+    uploadedAt: Timestamp.now(),
+    category: "document",
+    file: null,
   });
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   // Modal States
   const [showAddPaymentPopup, setShowAddPaymentPopup] = useState(false);
@@ -868,7 +1009,6 @@ export default function AdminDashboard() {
   const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [tempStatus, setTempStatus] = useState("");
   const [newMessage, setNewMessage] = useState("");
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [formNotes, setFormNotes] = useState("");
   const [suggestionComment, setSuggestionComment] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
@@ -1453,8 +1593,10 @@ export default function AdminDashboard() {
       });
 
       setNewFAQ({
+        id: "",
         question: "",
         answer: "",
+        order: 0,
       });
 
       fetchData();
@@ -1626,8 +1768,8 @@ export default function AdminDashboard() {
       const currentTimestamp = serverTimestamp();
 
       const paymentData = {
-        amount: parseFloat(newPayment.amount),
-        dueDate: Timestamp.fromDate(new Date(newPayment.dueDate)),
+        amount: newPayment.amount,
+        dueDate: formatDateToDDMMYYYY(newPayment.dueDate),
         type: newPayment.type,
         status: newPayment.status,
         memberId: newPayment.memberId,
@@ -1660,11 +1802,15 @@ export default function AdminDashboard() {
 
       // Reset form
       setNewPayment({
-        memberId: "",
-        amount: "",
-        dueDate: "",
-        type: "Maintenance",
+        id: "",
+        amount: 0,
+        dueDate: Timestamp.now(),
+        paidDate: Timestamp.now(),
         status: "pending",
+        transactionId: "",
+        type: "Maintenance",
+        memberId: "",
+        memberName: "",
       });
 
       setMemberSearchTerm("");
@@ -1874,10 +2020,8 @@ export default function AdminDashboard() {
         model: newVehicle.model,
         numberPlate: newVehicle.numberPlate,
         parking: newVehicle.parking,
-        startDate: Timestamp.fromDate(new Date(newVehicle.startDate)),
-        endDate: newVehicle.endDate
-          ? Timestamp.fromDate(new Date(newVehicle.endDate))
-          : null,
+        startDate: newVehicle.startDate,
+        endDate: Timestamp.now(),  
         isCurrent: newVehicle.isCurrent,
         createdAt: serverTimestamp(),
         rcBookNumber: "",
@@ -1894,8 +2038,8 @@ export default function AdminDashboard() {
         model: "",
         numberPlate: "",
         parking: false,
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: "",
+        startDate: Timestamp.now(),
+        endDate: undefined,
         isCurrent: true,
         rcBookNumber: "",
       });
@@ -1912,39 +2056,39 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUpdateVehicleStatus = async (
-    memberId: string,
-    vehicleId: string,
-    isCurrent: boolean,
-    endDate?: string
-  ) => {
-    try {
-      const vehicleRef = doc(db, "members", memberId, "vehicles", vehicleId);
+const handleUpdateVehicleStatus = async (
+  memberId: string,
+  vehicleId: string,
+  isCurrent: boolean,
+  endDate?: Timestamp 
+) => {
+  try {
+    const vehicleRef = doc(db, "members", memberId, "vehicles", vehicleId);
 
-      const updateData: any = {
-        isCurrent,
-        updatedAt: serverTimestamp(),
-      };
+    const updateData: any = {
+      isCurrent,
+      updatedAt: serverTimestamp(),
+    };
 
-      if (isCurrent) {
-        // If marked current again, remove endDate
-        updateData.endDate = deleteField();
-      } else if (endDate) {
-        updateData.endDate = Timestamp.fromDate(new Date(endDate));
-      } else {
-        updateData.endDate = serverTimestamp();
-      }
-
-      await updateDoc(vehicleRef, updateData);
-
-      fetchVehicles();
-
-      alert("Vehicle status updated successfully!");
-    } catch (error) {
-      console.error("Error updating vehicle status:", error);
-      alert("Failed to update vehicle status. Please try again.");
+    if (isCurrent) {
+      updateData.endDate = deleteField();
+    } else if (endDate) {
+      updateData.endDate = endDate;
+    } else {
+      updateData.endDate = Timestamp.now();
     }
-  };
+
+    await updateDoc(vehicleRef, updateData);
+
+    fetchVehicles();
+
+    alert("Vehicle status updated successfully!");
+  } catch (error) {
+    console.error("Error updating vehicle status:", error);
+    alert("Failed to update vehicle status. Please try again.");
+  }
+};
+
 
   const handleDeleteVehicle = async (memberId: string, vehicleId: string) => {
     try {
@@ -1960,7 +2104,7 @@ export default function AdminDashboard() {
         initiateDeletion(
           "vehicle",
           `${memberId}_${vehicleId}`,
-          `Vehicle: ${vehicleData.vehicleNumber || "Unknown Vehicle"} for ${
+          `Vehicle: ${vehicleData.numberPlate || "Unknown Vehicle"} for ${
             member?.name || "Unknown Member"
           }`
         );
@@ -1978,8 +2122,9 @@ export default function AdminDashboard() {
     try {
       const providerData = {
         ...newProvider,
-        monthlySalary: parseFloat(newProvider.monthlySalary),
-        joiningDate: Timestamp.fromDate(new Date(newProvider.joiningDate)),
+        id: newProvider.id ?? crypto.randomUUID(),
+        monthlySalary: newProvider.monthlySalary,
+        joiningDate: formatDateToDDMMYYYY(newProvider.joiningDate),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -1992,8 +2137,8 @@ export default function AdminDashboard() {
         phone: "",
         email: "",
         address: "",
-        monthlySalary: "",
-        joiningDate: new Date().toISOString().split("T")[0],
+        monthlySalary: 0,
+        joiningDate: Timestamp.now(),
         isActive: true,
         documents: {
           aadhaar: "",
@@ -2022,8 +2167,8 @@ export default function AdminDashboard() {
       phone: provider.phone,
       email: provider.email || "",
       address: provider.address || "",
-      monthlySalary: provider.monthlySalary.toString(),
-      joiningDate: provider.joiningDate.toDate().toISOString().split("T")[0],
+      monthlySalary: provider.monthlySalary,
+      joiningDate: provider.joiningDate,
       isActive: provider.isActive,
       documents: {
         aadhaar: provider.documents?.aadhaar ?? "",
@@ -2043,7 +2188,7 @@ export default function AdminDashboard() {
     try {
       const providerData = {
         ...newProvider,
-        monthlySalary: parseFloat(newProvider.monthlySalary),
+        monthlySalary: newProvider.monthlySalary,
         updatedAt: serverTimestamp(),
       };
 
@@ -2074,23 +2219,30 @@ export default function AdminDashboard() {
     );
   };
 
-  const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
-    try {
-      await updateDoc(doc(db, "serviceProviders", id), {
-        isActive: !isActive,
-        updatedAt: serverTimestamp(),
-      });
-      fetchServiceProviders();
-      alert(
-        `Service provider ${
-          !isActive ? "activated" : "deactivated"
-        } successfully!`
-      );
-    } catch (error) {
-      console.error("Error toggling service provider status:", error);
-      alert("Failed to update service provider status. Please try again.");
+const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
+  try {
+    const updateData: any = {
+      isActive: !isActive,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (!isActive) {
+      updateData.joiningDate = serverTimestamp();
     }
-  };
+
+    await updateDoc(doc(db, "serviceProviders", id), updateData);
+
+    fetchServiceProviders();
+    alert(
+      `Service provider ${
+        !isActive ? "activated" : "deactivated"
+      } successfully!`
+    );
+  } catch (error) {
+    console.error("Error toggling service provider status:", error);
+    alert("Failed to update service provider status. Please try again.");
+  }
+};
 
   // Document Functions
   const handleUploadDocument = async (e: React.FormEvent) => {
@@ -2118,11 +2270,18 @@ export default function AdminDashboard() {
       });
 
       setNewDocument({
+        id: "",
         title: "",
         description: "",
-        file: null,
-        category: "document",
+        fileUrl: "",
+        fileName: "",
+        fileType: "",
+        fileSize: 0,
         isPublic: false,
+        uploadedBy: "",
+        uploadedAt: Timestamp.now(),
+        category: "document",
+        file: null,
       });
       setShowAddDocumentModal(false);
       fetchDocuments();
@@ -2249,9 +2408,14 @@ export default function AdminDashboard() {
     setIsAddingAdmin(true);
 
     try {
+      if (!newAdmin.email) {
+        alert("Email is required");
+        return;
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
-        `${newAdmin.email}`,
+        newAdmin.email,
         "TempPassword123"
       );
 
@@ -2267,6 +2431,7 @@ export default function AdminDashboard() {
         adminPosition: newAdmin.adminPosition,
       });
 
+      // Reset form and close popup
       setNewAdmin({
         name: "",
         email: "",
@@ -2278,9 +2443,10 @@ export default function AdminDashboard() {
       setShowAddAdminPopup(false);
       fetchAdmins();
 
-      alert("Admin added successfully! Username: " + newAdmin.unitNumber);
+      alert("Admin added successfully! Username: " + newAdmin.email);
     } catch (error: any) {
       console.error("Error adding admin:", error);
+      alert("Failed to add admin: " + error.message);
     } finally {
       setIsAddingAdmin(false);
     }
@@ -2339,6 +2505,10 @@ export default function AdminDashboard() {
     status: Suggestion["status"],
     comment?: string
   ) => {
+    if (!user || !adminDetails) {
+      alert("User information not available");
+      return;
+    }
     try {
       const suggestionRef = doc(db, "suggestions", suggestionId);
 
@@ -2350,7 +2520,7 @@ export default function AdminDashboard() {
       if (comment) {
         const commentData = {
           id: generateRandomId(),
-          userId: user.uid,
+          userId: user?.uid,
           userName: adminDetails?.name || "Admin",
           userType: "admin",
           comment: comment,
@@ -2393,6 +2563,10 @@ export default function AdminDashboard() {
     formId: string,
     status: "pending" | "reviewed" | "approved" | "rejected"
   ) => {
+    if (!user || !adminDetails) {
+      alert("User information not available");
+      return;
+    }
     try {
       if (!formNotes.trim()) {
         alert("Please add a comment before updating the status");
@@ -2400,7 +2574,7 @@ export default function AdminDashboard() {
       }
 
       await addDoc(collection(db, "redevelopmentForms", formId, "comments"), {
-        userId: user.uid,
+        userId: user?.uid,
         userName: adminDetails?.name || "Admin",
         userType: "admin",
         comment: formNotes,
@@ -2522,9 +2696,13 @@ export default function AdminDashboard() {
     itemName: string,
     reason: string
   ) => {
+    if (!user || !adminDetails) {
+      alert("User information not available");
+      return;
+    }
     try {
       await addDoc(collection(db, "deletionRequests"), {
-        adminId: user.uid,
+        adminId: user?.uid,
         adminName: adminDetails?.name,
         adminEmail: adminDetails?.email,
         itemType,
@@ -2635,6 +2813,10 @@ export default function AdminDashboard() {
   // Deletion approval Functions
 
   const handleDeletionRequest = async (requestId: string, approve: boolean) => {
+    if (!adminDetails) {
+      alert("Admin details not available");
+      return;
+    }
     try {
       const requestRef = doc(db, "deletionRequests", requestId);
       const requestDoc = await getDoc(requestRef);
@@ -2960,9 +3142,9 @@ export default function AdminDashboard() {
     const q = query(chatRef, orderBy("timestamp", "asc"));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messages = snapshot.docs.map((doc) => ({
+      const messages: ChatMessage[] = snapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data(),
+        ...(doc.data() as Omit<ChatMessage, "id">),
       }));
       setChatMessages(messages);
     });
@@ -2972,7 +3154,8 @@ export default function AdminDashboard() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedComplaintChat || !newMessage.trim() || !user) return;
+    if (!selectedComplaintChat || !newMessage.trim() || !user || !adminDetails)
+      return;
 
     try {
       const chatRef = collection(
@@ -2985,7 +3168,7 @@ export default function AdminDashboard() {
       const messageData = {
         sender: "admin",
         senderId: user.uid,
-        senderName: adminDetails.name,
+        senderName: adminDetails?.name,
         message: newMessage.trim(),
         timestamp: serverTimestamp(),
         readBy: [user.uid],
@@ -3104,27 +3287,50 @@ export default function AdminDashboard() {
   // USE EFFECT HOOKS
   // ==============================
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
+useEffect(() => {
+  const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+    if (firebaseUser) {
+      try {
         const docRef = doc(db, "admins", firebaseUser.uid);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
+          const data = docSnap.data();
+          setUser(firebaseUser);
+          setAdminDetails({
+            id: docSnap.id,
+            name: data.name || "",
+            email: data.email || "",
+            unitNumber: data.unitNumber || "",
+            position: data.position || "",
+            adminPosition: data.adminPosition || "",
+          });
           setIsAdmin(true);
-          setAdminDetails(docSnap.data());
-          fetchData();
+          setLoading(false); // Move this here
+          await fetchData(); // Fetch data after successful auth
         } else {
+          setIsAdmin(false);
+          setLoading(false);
           router.push("/");
         }
-      } else {
+      } catch (err) {
+        console.error("Error checking admin:", err);
+        setIsAdmin(false);
+        setLoading(false);
         router.push("/");
       }
-    });
+    } else {
+      // Not logged in
+      setUser(null);
+      setIsAdmin(false);
+      setLoading(false);
+      router.push("/");
+    }
+  });
 
-    return () => unsubscribe();
-  }, [router]);
+  return () => unsubscribe();
+}, [router]);
+
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -7365,7 +7571,7 @@ export default function AdminDashboard() {
                             onChange={(e) =>
                               setNewPayment({
                                 ...newPayment,
-                                amount: e.target.value,
+                                amount: parseFloat(e.target.value) || 0,
                               })
                             }
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -7373,24 +7579,28 @@ export default function AdminDashboard() {
                           />
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Due Date
-                          </label>
-                          <input
-                            type="date"
-                            required
-                            value={newPayment.dueDate}
-                            onChange={(e) =>
-                              setNewPayment({
-                                ...newPayment,
-                                dueDate: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Due Date"
-                          />
-                        </div>
+                       <div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Due Date
+  </label>
+  <input
+    type="date"
+    required
+    value={
+      newPayment.dueDate
+        ? newPayment.dueDate.toDate().toISOString().split("T")[0] 
+        : ""
+    }
+    onChange={(e) =>
+      setNewPayment({
+        ...newPayment,
+        dueDate: Timestamp.fromDate(new Date(e.target.value)), 
+      })
+    }
+    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    placeholder="Due Date"
+  />
+</div>
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -8217,12 +8427,12 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div>
+                            {/* <div>
                               Start:{" "}
                               {vehicle.startDate
                                 ? formatDateTime(vehicle.startDate)
                                 : "-"}
-                            </div>
+                            </div> */}
                             <div>
                               End:{" "}
                               {vehicle.endDate
@@ -8242,53 +8452,61 @@ export default function AdminDashboard() {
                               {vehicle.isCurrent ? "Current" : "Past"}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            {vehicle.isCurrent ? (
-                              <button
-                                onClick={() => {
-                                  const endDate = prompt(
-                                    "Enter end date (YYYY-MM-DD):",
-                                    new Date().toISOString().split("T")[0]
-                                  );
-                                  if (endDate) {
-                                    handleUpdateVehicleStatus(
-                                      vehicle.memberId,
-                                      vehicle.id,
-                                      false,
-                                      endDate
-                                    );
-                                  }
-                                }}
-                                className="text-orange-600 hover:text-orange-900 mr-3 cursor-pointer"
-                              >
-                                Mark as Past
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() =>
-                                  handleUpdateVehicleStatus(
-                                    vehicle.memberId,
-                                    vehicle.id,
-                                    true
-                                  )
-                                }
-                                className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
-                              >
-                                Mark as Current
-                              </button>
-                            )}
-                            <button
-                              onClick={() =>
-                                handleDeleteVehicle(
-                                  vehicle.memberId,
-                                  vehicle.id
-                                )
-                              }
-                              className="text-red-600 hover:text-red-900 cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </td>
+                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+  {vehicle.isCurrent ? (
+    <button
+      onClick={() => {
+        const endDateStr = prompt(
+          "Enter end date (YYYY-MM-DD):",
+          new Date().toISOString().split("T")[0]
+        );
+
+        if (endDateStr) {
+          const endDate = (() => {
+            const [year, month, day] = endDateStr.split("-").map(Number);
+            const now = new Date();
+            const dateWithTime = new Date(
+              year,
+              month - 1,
+              day,
+              now.getHours(),
+              now.getMinutes(),
+              now.getSeconds(),
+              now.getMilliseconds()
+            );
+            return Timestamp.fromDate(dateWithTime);
+          })();
+
+          handleUpdateVehicleStatus(
+            vehicle.memberId,
+            vehicle.id,
+            false,
+            endDate
+          );
+        }
+      }}
+      className="text-orange-600 hover:text-orange-900 mr-3 cursor-pointer"
+    >
+      Mark as Past
+    </button>
+  ) : (
+    <button
+      onClick={() =>
+        handleUpdateVehicleStatus(vehicle.memberId, vehicle.id, true)
+      }
+      className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
+    >
+      Mark as Current
+    </button>
+  )}
+  <button
+    onClick={() => handleDeleteVehicle(vehicle.memberId, vehicle.id)}
+    className="text-red-600 hover:text-red-900 cursor-pointer"
+  >
+    Delete
+  </button>
+</td>
+
                         </tr>
                       ))}
                     </tbody>
@@ -8487,16 +8705,20 @@ export default function AdminDashboard() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Start Date
                       </label>
-                      <input
-                        type="date"
-                        required
-                        value={newVehicle.startDate}
-                        onChange={(e) =>
-                          setNewVehicle({
-                            ...newVehicle,
-                            startDate: e.target.value,
-                          })
-                        }
+<input
+  type="date"
+  required
+  value={
+    newVehicle.startDate
+      ? newVehicle.startDate.toDate().toISOString().split("T")[0].slice(0, 16) 
+      : ""
+  }
+  onChange={(e) =>
+    setNewVehicle({
+      ...newVehicle,
+      startDate: timestampWithDateAndCurrentTime(e.target.value),
+    })
+  }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
@@ -8528,11 +8750,13 @@ export default function AdminDashboard() {
                         <input
                           type="date"
                           required={!newVehicle.isCurrent}
-                          value={newVehicle.endDate}
+                          value={formatDateToDDMMYYYY(newVehicle.endDate)}
                           onChange={(e) =>
                             setNewVehicle({
                               ...newVehicle,
-                              endDate: e.target.value,
+                              endDate: Timestamp.fromDate(
+                                new Date(e.target.value)
+                              ),
                             })
                           }
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -8581,8 +8805,8 @@ export default function AdminDashboard() {
                       phone: "",
                       email: "",
                       address: "",
-                      monthlySalary: "",
-                      joiningDate: new Date().toISOString().split("T")[0],
+                      monthlySalary: 0,
+                      joiningDate: Timestamp.now(),
                       isActive: true,
                       documents: {
                         aadhaar: "",
@@ -8953,7 +9177,7 @@ export default function AdminDashboard() {
                         onChange={(e) =>
                           setNewProvider({
                             ...newProvider,
-                            monthlySalary: e.target.value,
+                            monthlySalary: parseFloat(e.target.value) || 0,
                           })
                         }
                         className="w-full px-4 py-3 text-black border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
@@ -8968,11 +9192,13 @@ export default function AdminDashboard() {
                       <input
                         type="date"
                         required
-                        value={newProvider.joiningDate}
+                        value={formatDateToDDMMYYYY(newProvider.joiningDate)}
                         onChange={(e) =>
                           setNewProvider({
                             ...newProvider,
-                            joiningDate: e.target.value,
+                            joiningDate: Timestamp.fromDate(
+                              new Date(e.target.value)
+                            ),
                           })
                         }
                         className="w-full px-4 py-3 text-black border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
