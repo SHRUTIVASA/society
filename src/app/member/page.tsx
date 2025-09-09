@@ -28,10 +28,294 @@ import {
   arrayUnion,
   Timestamp,
   serverTimestamp,
-  arrayRemove,
+  UpdateData,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signOut,
+  User as FirebaseUser,
+} from "firebase/auth";
+
+// ==============================
+// INTERFACE DEFINITIONS
+// ==============================
+
+interface Testimonial {
+  id: string;
+  name: string;
+  unit: string;
+  content: string;
+  rating: number;
+  createdAt: Timestamp;
+  approved: boolean;
+  userId?: string;
+}
+
+interface FAQ {
+  id: string;
+  question: string;
+  answer: string;
+  order: number;
+}
+
+interface Query {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  query: string;
+  status: string;
+  createdAt: Timestamp;
+}
+
+interface Payment {
+  id: string;
+  amount: number;
+  dueDate: Timestamp;
+  paidDate?: Timestamp;
+  status: string;
+  transactionId: string;
+  type: string;
+  memberId: string;
+  memberName: string;
+}
+
+interface Complaint {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  status: string;
+  createdAt: Timestamp | Date;
+  updatedAt: Timestamp | Date;
+  memberId?: string;
+  memberName?: string;
+  unitNumber?: string;
+  inProgressNotes?: string;
+  completedNotes?: string;
+  files?: ComplaintFile[];
+}
+
+interface ComplaintFile {
+  id: string;
+  name: string;
+  url: string;
+  uploadedAt: Timestamp;
+  uploadedBy: string;
+}
+
+interface FamilyMember {
+  id?: string;
+  name: string;
+  relation: string;
+  age: number;
+  phone?: string;
+}
+
+interface Vehicle {
+  id?: string;
+  type: string;
+  model: string;
+  numberPlate: string;
+  parking: boolean;
+  startDate: Timestamp | string;
+  endDate?: Timestamp | string;
+  isCurrent: boolean;
+  rcBookNumber?: string;
+  FileUrls?: string[];
+  memberUnit?: string;
+  memberId?: string;
+  memberName?: string;
+}
+
+interface MemberDetails {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  unitNumber: string;
+  memberSince: number;
+  createdAt?: Timestamp;
+  familyMembers?: FamilyMember[];
+  vehicles?: Vehicle[];
+  alternateAddress?: string;
+  propertyStatus?: string;
+  agreementStartDate?: string;
+  agreementEndDate?: string;
+}
+
+interface RedevelopmentForm {
+  id: string;
+  userId: string;
+  name: string;
+  phone: string;
+  userUnit: string;
+  email: string;
+  status: "pending" | "reviewed" | "approved" | "rejected";
+  submittedAt: Timestamp;
+  updatedAt?: Timestamp;
+  alternateAddress?: string;
+  vacateDate?: Timestamp | null;
+  fileUrls?: string[];
+  comments?: Comment[];
+  initialComments?: string;
+}
+
+interface Comment {
+  id: string;
+  userId: string;
+  userName: string;
+  userType: string;
+  comment: string;
+  timestamp: Timestamp;
+  statusChange?: "pending" | "reviewed" | "approved" | "rejected";
+}
+
+interface ServiceProvider {
+  id: string;
+  name: string;
+  role: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  monthlySalary: number;
+  joiningDate: Timestamp;
+  isActive: boolean;
+  documents?: {
+    aadhaar?: string;
+    pan?: string;
+    contract?: string;
+  };
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+interface Suggestion {
+  id: string;
+  memberId: string;
+  userName: string;
+  unitNumber: string;
+  title: string;
+  description: string;
+  category: string;
+  status:
+    | "pending"
+    | "reviewed"
+    | "approved"
+    | "rejected"
+    | "implemented"
+    | "under-review";
+  priority: "low" | "medium" | "high";
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  votes?: {
+    upvotes: number;
+    downvotes: number;
+    voters: string[];
+  };
+  comments?: Comment[];
+}
+
+interface Document {
+  id: string;
+  title: string;
+  description: string;
+  fileUrl: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  isPublic: boolean;
+  uploadedBy: string;
+  uploadedAt: Timestamp;
+  category: "document" | "notice";
+  content?: string;
+  createdAt?: Timestamp;
+}
+
+interface CommitteeMember {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  position: string;
+  description: string;
+}
+
+interface Admin {
+  id: string;
+  name: string;
+  email: string;
+  unitNumber: string;
+  position: string;
+  adminPosition: string;
+}
+
+interface DeletionRequest {
+  id: string;
+  adminId: string;
+  adminName: string;
+  adminEmail: string;
+  itemType: string;
+  itemId: string;
+  itemName: string;
+  reason?: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: Timestamp;
+  reviewedBy?: string;
+  reviewedAt?: Timestamp;
+}
+
+interface ChatMessage {
+  id: string;
+  sender: "member" | "admin";
+  senderId: string;
+  senderName: string;
+  message: string;
+  timestamp: Timestamp;
+  readBy?: string[];
+}
+
+interface User {
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+}
+
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  date: Timestamp | Date;
+  location: string;
+}
+
+// Define proper types for the member data structure
+interface Member {
+  name: string;
+  phone: string | number;
+  unitNumber: string;
+  memberSince?: string;
+  alternateAddress?: string;
+  propertyStatus?: "owned" | "rented";
+  agreementStartDate?: string;
+  agreementEndDate?: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+// Define EditProfileData interface
+interface EditProfileData {
+  name: string;
+  phone: number;
+  unitNumber: string;
+  familyMembers: FamilyMember[];
+  vehicles: Vehicle[];
+  alternateAddress?: string;
+  propertyStatus?: "owned" | "rented";
+  agreementStartDate?: string;
+  agreementEndDate?: string;
+}
 
 type ComplaintType =
   | "Plumbing"
@@ -42,15 +326,6 @@ type ComplaintType =
   | "Parking"
   | "Elevator"
   | "Other";
-
-// 2. Define Complaint Interface
-// interface Complaint {
-//   id: number;
-//   type: ComplaintType;
-//   title: string;
-//   status: string;
-//   date: string;
-// }
 
 const COMPLAINT_TYPES: Record<
   ComplaintType,
@@ -279,31 +554,22 @@ const TestimonialsIcon = () => (
   </svg>
 );
 
-interface CommitteeMember {
-  id: string;
-  name: string;
-  phone: number;
-  email: string;
-  position: string;
-  description: string;
-}
-
 export default function MemberDashboard() {
   const [user, setUser] = useState<User | null>(null);
-  const [userData, setUserData] = useState<any>(null);
-  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [complaints, setComplaints] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [notices, setNotices] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
+  const [userData, setUserData] = useState<Member | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [notices, setNotices] = useState<Document[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestionModal, setShowSuggestionModal] = useState(false);
   const [newSuggestion, setNewSuggestion] = useState({
     title: "",
@@ -320,16 +586,16 @@ export default function MemberDashboard() {
   );
   const [committeeFilter, setCommitteeFilter] = useState("all");
 
-  const [testimonials, setTestimonials] = useState<any[]>([]);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [showAddTestimonialModal, setShowAddTestimonialModal] = useState(false);
   const [newTestimonial, setNewTestimonial] = useState({
     content: "",
     rating: 5,
   });
 
-  const [userRedevelopmentForms, setUserRedevelopmentForms] = useState<any[]>(
-    []
-  );
+  const [userRedevelopmentForms, setUserRedevelopmentForms] = useState<
+    RedevelopmentForm[]
+  >([]);
   const [formComment, setFormComment] = useState("");
 
   useEffect(() => {
@@ -361,21 +627,9 @@ export default function MemberDashboard() {
   );
   const [newVehicleFiles, setNewVehicleFiles] = useState<File[]>([]);
 
-  // const suggestionsQuery = query(
-  //   collection(db, "suggestions"),
-  //   where("userId", "==", user?.uid || ""),
-  //   orderBy("createdAt", "desc")
-  // );
-
-  // const unsubscribeSuggestions = onSnapshot(suggestionsQuery, (snapshot) => {
-  //   const suggestionsData = snapshot.docs.map((doc) => ({
-  //     id: doc.id,
-  //     ...doc.data(),
-  //   }));
-  //   setSuggestions(suggestionsData);
-  // });
-
-  const [serviceProviders, setServiceProviders] = useState<any[]>([]);
+  const [serviceProviders, setServiceProviders] = useState<ServiceProvider[]>(
+    []
+  );
   const [serviceProviderFilter, setServiceProviderFilter] = useState("all");
 
   const [showRedevelopmentForm, setShowRedevelopmentForm] = useState(false);
@@ -425,19 +679,27 @@ export default function MemberDashboard() {
   const [selectedComplaintChat, setSelectedComplaintChat] = useState<
     string | null
   >(null);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [showChatModal, setShowChatModal] = useState(false);
 
-  const [editingForm, setEditingForm] = useState<any>(null);
+  const [editingForm, setEditingForm] = useState<RedevelopmentForm | null>(
+    null
+  );
   const [editFormData, setEditFormData] = useState({
     vacateDate: "",
     alternateAddress: "",
     comments: "",
   });
 
+  const [suggestionSearch, setSuggestionSearch] = useState("");
+  const [currentSuggestionPage, setCurrentSuggestionPage] = useState(1);
+  const [suggestionsPerPage, setSuggestionsPerPage] = useState(10);
+  const [sortBy, setSortBy] = useState("newest");
+  const [searchTerm, setSearchTerm] = useState("");
+
   // Function to handle edit button click
-  const handleEditForm = (form: any) => {
+  const handleEditForm = (form: RedevelopmentForm) => {
     setEditingForm(form);
 
     const vacateDate = form.vacateDate?.toDate
@@ -456,12 +718,15 @@ export default function MemberDashboard() {
     e.preventDefault();
     if (!editingForm) return;
 
-    const formUpdates = {
+    const formUpdates: Partial<RedevelopmentForm> = {
       alternateAddress: editFormData.alternateAddress,
-      vacateDate: editFormData.vacateDate
-        ? Timestamp.fromDate(new Date(editFormData.vacateDate))
-        : null,
     };
+
+    if (editFormData.vacateDate) {
+      formUpdates.vacateDate = Timestamp.fromDate(
+        new Date(editFormData.vacateDate)
+      );
+    }
 
     const { comments } = editFormData;
 
@@ -484,48 +749,11 @@ export default function MemberDashboard() {
     }
   };
 
-  // Main member document
-  type Member = {
-    name: string;
-    phone: number;
-    unitNumber: string;
-    memberSince?: string;
-    alternateAddress?: string;
-    propertyStatus?: "owned" | "rented";
-    agreementStartDate?: string;
-    agreementEndDate?: string;
-  };
-
-  // Subcollection: familyMembers
-  type FamilyMember = {
-    age: number;
-    name: string;
-    relation: string;
-  };
-
-  // Subcollection: vehicles
-  type Vehicle = {
-    model: string;
-    numberPlate: string;
-    type: string;
-    parking: boolean;
-    isCurrent: boolean;
-    startDate: Timestamp | string;
-    endDate: Timestamp | string;
-    rcBookNumber?: string;
-    FileUrls?: string[];
-  };
-
-  type EditProfileData = Member & {
-    familyMembers: FamilyMember[];
-    vehicles: Vehicle[];
-  };
-
   const handleUpdateRedevelopmentForm = async (
     formId: string,
-    updates: any
+    updates: Partial<RedevelopmentForm>
   ) => {
-    if (!user) return;
+    if (!user) return false;
 
     try {
       const formRef = doc(db, "redevelopmentForms", formId);
@@ -567,7 +795,7 @@ export default function MemberDashboard() {
       const messages = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      })) as ChatMessage[];
       setChatMessages(messages);
     });
 
@@ -645,12 +873,7 @@ export default function MemberDashboard() {
     ),
   };
 
-  const [suggestionSearch, setSuggestionSearch] = useState("");
-  const [currentSuggestionPage, setCurrentSuggestionPage] = useState(1);
-  const [suggestionsPerPage, setSuggestionsPerPage] = useState(10);
-  const [sortBy, setSortBy] = useState("newest");
-
-  const filterSuggestions = (suggestions: any[]) => {
+  const filterSuggestions = (suggestions: Suggestion[]) => {
     return suggestions.filter((suggestion) => {
       // Status filter
       if (
@@ -678,7 +901,7 @@ export default function MemberDashboard() {
     });
   };
 
-  const sortSuggestions = (suggestions: any[]) => {
+  const sortSuggestions = (suggestions: Suggestion[]) => {
     const sorted = [...suggestions];
 
     switch (sortBy) {
@@ -723,36 +946,8 @@ export default function MemberDashboard() {
     indexOfFirstSuggestion,
     indexOfLastSuggestion
   );
-  const [searchTerm, setSearchTerm] = useState("");
 
   const totalPages = Math.ceil(filteredSuggestions.length / suggestionsPerPage);
-
-  // const fetchUnreadMessageCounts = async () => {
-  //   try {
-  //     const counts: { [complaintId: string]: number } = {};
-
-  //     for (const complaint of complaints) {
-  //       const chatRef = collection(
-  //         db,
-  //         "complaintChats",
-  //         complaint.id,
-  //         "messages"
-  //       );
-  //       const q = query(
-  //         chatRef,
-  //         where("sender", "==", "admin"),
-  //          where("readBy", "not-in", [[user.uid]])
-  //       );
-
-  //       const snapshot = await getDocs(q);
-  //       counts[complaint.id] = snapshot.size;
-  //     }
-
-  //     setUnreadMessageCounts(counts);
-  //   } catch (error) {
-  //     console.error("Error fetching unread message counts:", error);
-  //   }
-  // };
 
   useEffect(() => {
     if (!user || complaints.length === 0) return;
@@ -803,10 +998,10 @@ export default function MemberDashboard() {
         where("userId", "==", user.uid)
       );
       const formsSnapshot = await getDocs(formsQuery);
-      const formsData = [];
+      const formsData: RedevelopmentForm[] = [];
 
       for (const formDoc of formsSnapshot.docs) {
-        const formData = formDoc.data();
+        const formData = formDoc.data() as Omit<RedevelopmentForm, "id">;
 
         // Fetch comments for this form
         const commentsQuery = query(
@@ -817,7 +1012,7 @@ export default function MemberDashboard() {
         const commentsData = commentsSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }));
+        })) as Comment[];
 
         formsData.push({
           id: formDoc.id,
@@ -915,15 +1110,23 @@ export default function MemberDashboard() {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser: User | null) => {
-      if (currentUser) {
-        setUser(currentUser);
-        fetchUserData(currentUser.uid);
-        setupRealtimeListeners(currentUser.uid);
-      } else {
-        router.push("/");
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (currentUser: FirebaseUser | null) => {
+        if (currentUser) {
+          const userObj: User = {
+            uid: currentUser.uid,
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+          };
+          setUser(userObj);
+          fetchUserData(currentUser.uid);
+          setupRealtimeListeners(currentUser.uid);
+        } else {
+          router.push("/");
+        }
       }
-    });
+    );
 
     return () => unsubscribe();
   }, [router]);
@@ -993,10 +1196,14 @@ export default function MemberDashboard() {
         const familySnapshot = await getDocs(
           collection(db, "members", userId, "familyMembers")
         );
-        const familyData: FamilyMember[] = familySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<FamilyMember, "id">),
-        }));
+        const familyData: FamilyMember[] = familySnapshot.docs.map((doc) => {
+          const data = doc.data() as Omit<FamilyMember, "id">;
+          return {
+            id: doc.id,
+            ...data,
+            age: Number(data.age) || 0, 
+          };
+        });
 
         // Fetch vehicles
         const vehiclesSnapshot = await getDocs(
@@ -1042,7 +1249,7 @@ export default function MemberDashboard() {
       const familyData = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      })) as FamilyMember[];
       setFamilyMembers(familyData);
     });
 
@@ -1056,7 +1263,7 @@ export default function MemberDashboard() {
       const vehiclesData = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      })) as Vehicle[];
       setVehicles(vehiclesData);
     });
 
@@ -1071,7 +1278,7 @@ export default function MemberDashboard() {
         const testimonialsData = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }));
+        })) as Testimonial[];
         setTestimonials(testimonialsData);
       }
     );
@@ -1084,7 +1291,7 @@ export default function MemberDashboard() {
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           const complaintsData = docSnapshot.data();
-          const complaintsArray = [];
+          const complaintsArray: Complaint[] = [];
 
           for (const [complaintId, complaintData] of Object.entries(
             complaintsData
@@ -1092,14 +1299,15 @@ export default function MemberDashboard() {
             if (complaintId !== "userId" && typeof complaintData === "object") {
               complaintsArray.push({
                 id: complaintId,
-                ...complaintData,
+                ...(complaintData as Omit<Complaint, "id">),
               });
             }
           }
 
           complaintsArray.sort((a, b) => {
-            const dateA = getDateFromFirestore(a.createdAt);
-            const dateB = getDateFromFirestore(b.createdAt);
+            const dateA = getDateFromFirestore(a.createdAt)?.getTime() ?? 0;
+            const dateB = getDateFromFirestore(b.createdAt)?.getTime() ?? 0;
+
             return dateB - dateA;
           });
 
@@ -1116,7 +1324,7 @@ export default function MemberDashboard() {
     const unsubscribePayments = onSnapshot(paymentsDocRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const paymentsData = docSnapshot.data();
-        const paymentsArray = [];
+        const paymentsArray: Payment[] = [];
 
         for (const [transactionId, paymentData] of Object.entries(
           paymentsData
@@ -1124,14 +1332,16 @@ export default function MemberDashboard() {
           if (transactionId !== "userId" && typeof paymentData === "object") {
             paymentsArray.push({
               id: transactionId,
-              ...paymentData,
+              ...(paymentData as Omit<Payment, "id">),
             });
           }
         }
+
         paymentsArray.sort((a, b) => {
-          const dateA = getDateFromFirestore(a.dueDate);
-          const dateB = getDateFromFirestore(b.dueDate);
-          return dateA - dateB;
+          const dateA = getDateFromFirestore(a.dueDate)?.getTime() ?? 0;
+          const dateB = getDateFromFirestore(b.dueDate)?.getTime() ?? 0;
+
+          return dateB - dateA;
         });
 
         setPayments(paymentsArray);
@@ -1149,7 +1359,7 @@ export default function MemberDashboard() {
       const noticesData = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      })) as Document[];
       setNotices(noticesData);
     });
 
@@ -1164,7 +1374,7 @@ export default function MemberDashboard() {
         const providersData = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }));
+        })) as ServiceProvider[];
         setServiceProviders(providersData);
       }
     );
@@ -1178,7 +1388,7 @@ export default function MemberDashboard() {
       const suggestionsData = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      })) as Suggestion[];
       setSuggestions(suggestionsData);
     });
 
@@ -1189,7 +1399,7 @@ export default function MemberDashboard() {
       const eventsData = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      })) as Event[];
       setEvents(eventsData);
     });
 
@@ -1209,7 +1419,7 @@ export default function MemberDashboard() {
     };
   };
 
-  const filteredVehicles = vehicles.filter((vehicle) => {
+  const filteredVehicles: Vehicle[] = vehicles.filter((vehicle) => {
     // Filter by status
     if (vehicleFilter === "current" && !vehicle.isCurrent) return false;
     if (vehicleFilter === "past" && vehicle.isCurrent) return false;
@@ -1285,65 +1495,62 @@ export default function MemberDashboard() {
         return;
       }
 
-      const suggestionData = suggestionDoc.data();
+      const suggestionData = suggestionDoc.data() as Suggestion;
       const currentVotes = suggestionData.votes || {
         upvotes: 0,
         downvotes: 0,
         voters: [],
       };
+
       const hasUpvoted = currentVotes.voters.includes(`${user.uid}_upvote`);
       const hasDownvoted = currentVotes.voters.includes(`${user.uid}_downvote`);
 
-      let updates = {};
+      let newVotes = { ...currentVotes };
 
       if (voteType === "upvote") {
         if (hasUpvoted) {
           // Remove upvote
-          updates = {
-            "votes.upvotes": currentVotes.upvotes - 1,
-            "votes.voters": arrayRemove(`${user.uid}_upvote`),
-          };
+          newVotes.upvotes -= 1;
+          newVotes.voters = newVotes.voters.filter(
+            (v) => v !== `${user.uid}_upvote`
+          );
         } else {
-          // Add upvote, remove downvote if exists
-          updates = {
-            "votes.upvotes": currentVotes.upvotes + 1,
-            "votes.voters": arrayUnion(`${user.uid}_upvote`),
-          };
+          // Add upvote
+          newVotes.upvotes += 1;
+          newVotes.voters.push(`${user.uid}_upvote`);
 
+          // Remove downvote if exists
           if (hasDownvoted) {
-            updates = {
-              ...updates,
-              "votes.downvotes": currentVotes.downvotes - 1,
-              "votes.voters": arrayRemove(`${user.uid}_downvote`),
-            };
+            newVotes.downvotes -= 1;
+            newVotes.voters = newVotes.voters.filter(
+              (v) => v !== `${user.uid}_downvote`
+            );
           }
         }
       } else {
         if (hasDownvoted) {
           // Remove downvote
-          updates = {
-            "votes.downvotes": currentVotes.downvotes - 1,
-            "votes.voters": arrayRemove(`${user.uid}_downvote`),
-          };
+          newVotes.downvotes -= 1;
+          newVotes.voters = newVotes.voters.filter(
+            (v) => v !== `${user.uid}_downvote`
+          );
         } else {
-          // Add downvote, remove upvote if exists
-          updates = {
-            "votes.downvotes": currentVotes.downvotes + 1,
-            "votes.voters": arrayUnion(`${user.uid}_downvote`),
-          };
+          // Add downvote
+          newVotes.downvotes += 1;
+          newVotes.voters.push(`${user.uid}_downvote`);
 
+          // Remove upvote if exists
           if (hasUpvoted) {
-            updates = {
-              ...updates,
-              "votes.upvotes": currentVotes.upvotes - 1,
-              "votes.voters": arrayRemove(`${user.uid}_upvote`),
-            };
+            newVotes.upvotes -= 1;
+            newVotes.voters = newVotes.voters.filter(
+              (v) => v !== `${user.uid}_upvote`
+            );
           }
         }
       }
 
       await updateDoc(suggestionRef, {
-        ...updates,
+        votes: newVotes,
         updatedAt: serverTimestamp(),
       });
     } catch (error) {
@@ -1352,10 +1559,10 @@ export default function MemberDashboard() {
     }
   };
 
-  const formatDateTime = (timestamp: Timestamp | undefined): string => {
-    if (!timestamp) return "N/A";
+const formatDateTime = (value: Timestamp | Date | undefined): string => {
+    if (!value) return "N/A";
 
-    const date = timestamp instanceof Date ? timestamp : timestamp.toDate?.();
+    const date = value instanceof Timestamp ? value.toDate() : value;
     if (!date) return "N/A";
 
     const day = date.getDate().toString().padStart(2, "0");
@@ -1465,7 +1672,7 @@ export default function MemberDashboard() {
     try {
       const vehicleDocRef = doc(db, "members", user.uid, "vehicles", vehicleId);
 
-      const updateData: any = {
+      const updateData: UpdateData<Vehicle> = {
         isCurrent,
       };
 
@@ -1485,6 +1692,7 @@ export default function MemberDashboard() {
     }
   };
 
+  // SuggestionCard component with proper typing
   const SuggestionCard = ({
     suggestion,
     user,
@@ -1493,39 +1701,307 @@ export default function MemberDashboard() {
     expandedSuggestion,
     setExpandedSuggestion,
   }: {
-    suggestion: {
-      id: string;
-      title: string;
-      description: string;
-      category: string;
-      priority: string;
-      status: string;
-      userName: string;
-      unitNumber: string;
-      createdAt: any;
-      updatedAt?: any;
-      votes?: { upvotes: number; downvotes: number; voters: string[] };
-      comments?: { userName: string; timestamp: any; comment: string }[];
-    };
-    user: { uid: string } | null;
-    onVote: (
-      suggestionId: string,
-      voteType: "upvote" | "downvote",
-      currentVotes: { upvotes: number; downvotes: number; voters: string[] }
-    ) => void;
+    suggestion: Suggestion;
+    user: User | null;
+    onVote: (suggestionId: string, voteType: "upvote" | "downvote") => void;
     onAddComment: (suggestionId: string, comment: string) => void;
     expandedSuggestion: string | null;
     setExpandedSuggestion: React.Dispatch<React.SetStateAction<string | null>>;
   }) => {
-
     const [commentInput, setCommentInput] = useState("");
 
     const handleAddComment = () => {
       if (commentInput.trim()) {
         onAddComment(suggestion.id, commentInput);
-        setCommentInput(""); 
+        setCommentInput("");
       }
     };
+
+    const handleLogout = async () => {
+      setIsLoggingOut(true);
+      try {
+        setUser(null);
+        setUserData(null);
+        setFamilyMembers([]);
+        setVehicles([]);
+        setComplaints([]);
+        setPayments([]);
+
+        await signOut(auth);
+
+        router.push("/");
+      } catch (error) {
+        console.error("Error signing out:", error);
+        router.push("/");
+      } finally {
+        setIsLoggingOut(false);
+      }
+    };
+
+    // Add these handler functions
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+        const filesArray = Array.from(e.target.files);
+        setRedevelopmentForm({
+          ...redevelopmentForm,
+          files: filesArray,
+        });
+      }
+    };
+
+    const handleSubmitRedevelopment = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!user) return;
+
+      if (
+        !redevelopmentForm.name.trim() ||
+        !redevelopmentForm.email.trim() ||
+        !redevelopmentForm.phone.trim()
+      ) {
+        alert("Please fill in all compulsory fields: Name, Email, and Phone.");
+        return;
+      }
+
+      setIsSubmittingRedevelopment(true);
+      setUploadProgress(0);
+
+      try {
+        let fileUrls: string[] = [];
+        if (redevelopmentForm.files.length > 0) {
+          // You'll need to implement file upload logic here
+          // This is a placeholder for the actual implementation
+          for (let i = 0; i < redevelopmentForm.files.length; i++) {
+            // Simulate upload progress
+            setUploadProgress((i / redevelopmentForm.files.length) * 100);
+            // Actual upload code would go here
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate upload delay
+          }
+          setUploadProgress(100);
+        }
+
+        const vacateDateTimestamp = redevelopmentForm.vacateDate
+          ? Timestamp.fromDate(redevelopmentForm.vacateDate)
+          : null;
+
+        // Save form data to Firestore
+        const formRef = await addDoc(collection(db, "redevelopmentForms"), {
+          userId: user.uid,
+          userName: userData?.name || "",
+          userUnit: userData?.unitNumber || "",
+          userEmail: user.email || "",
+          name: redevelopmentForm.name,
+          phone: redevelopmentForm.phone,
+          email: redevelopmentForm.email,
+          vacateDate: vacateDateTimestamp,
+          alternateAddress: redevelopmentForm.alternateAddress,
+          fileUrls: [],
+          submittedAt: serverTimestamp(),
+          status: "pending",
+          initialComments: redevelopmentForm.comments.trim() || null,
+        });
+
+        if (redevelopmentForm.comments.trim()) {
+          await addDoc(
+            collection(db, "redevelopmentForms", formRef.id, "comments"),
+            {
+              userId: user.uid,
+              userName: userData?.name || "Member",
+              userType: "member",
+              comment: redevelopmentForm.comments.trim(),
+              timestamp: serverTimestamp(),
+            }
+          );
+        }
+
+        // Reset form
+        setRedevelopmentForm({
+          name: "",
+          phone: "",
+          email: "",
+          vacateDate: null,
+          alternateAddress: "",
+          comments: "",
+          files: [],
+        });
+
+        setShowRedevelopmentForm(false);
+        fetchUserRedevelopmentForms();
+        alert("Redevelopment form submitted successfully!");
+      } catch (error) {
+        console.error("Error submitting redevelopment form:", error);
+        alert("Error submitting form. Please try again.");
+      } finally {
+        setIsSubmittingRedevelopment(false);
+        setUploadProgress(0);
+      }
+    };
+
+    const handleSubmitComplaint = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!user) return;
+
+      try {
+        const complaintId = `#${Date.now().toString().slice(-6)}`;
+        const userComplaintsDocRef = doc(db, "complaints", user.uid);
+
+        const docSnapshot = await getDoc(userComplaintsDocRef);
+
+        if (docSnapshot.exists()) {
+          // Update existing document with new complaint
+          await updateDoc(userComplaintsDocRef, {
+            [complaintId]: {
+              type: newComplaint.type,
+              title: newComplaint.title,
+              description: newComplaint.description,
+              status: "Pending",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          // Create new document with first complaint
+          await setDoc(userComplaintsDocRef, {
+            userId: user.uid,
+            [complaintId]: {
+              type: newComplaint.type,
+              title: newComplaint.title,
+              description: newComplaint.description,
+              status: "Pending",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+        }
+
+        setNewComplaint({
+          type: "",
+          title: "",
+          description: "",
+        });
+
+        setShowComplaintModal(false);
+        alert("Complaint submitted successfully!");
+      } catch (error) {
+        console.error("Error submitting complaint:", error);
+        alert("Error submitting complaint. Please try again.");
+      }
+    };
+
+    const handleUpdateProfile = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!user) return;
+
+      try {
+        // Update main member document
+        await updateDoc(doc(db, "members", user.uid), {
+          name: editProfileData.name,
+          phone: editProfileData.phone,
+          unitNumber: editProfileData.unitNumber,
+          alternateAddress: editProfileData.alternateAddress || "",
+          propertyStatus: editProfileData.propertyStatus || "owned",
+          agreementStartDate:
+            editProfileData.propertyStatus === "rented"
+              ? editProfileData.agreementStartDate
+              : "",
+          agreementEndDate:
+            editProfileData.propertyStatus === "rented"
+              ? editProfileData.agreementEndDate
+              : "",
+          updatedAt: new Date(),
+        });
+
+        // Update family members subcollection
+        const familyMembersRef = collection(
+          db,
+          "members",
+          user.uid,
+          "familyMembers"
+        );
+        const existingFamily = await getDocs(familyMembersRef);
+        const deletePromises = existingFamily.docs.map((doc) =>
+          deleteDoc(doc.ref)
+        );
+        await Promise.all(deletePromises);
+
+        const addFamilyPromises = editProfileData.familyMembers.map((member) =>
+          addDoc(familyMembersRef, {
+            name: member.name,
+            relation: member.relation,
+            age: member.age,
+          })
+        );
+        await Promise.all(addFamilyPromises);
+
+        // Update vehicles subcollection
+        const vehiclesRef = collection(db, "members", user.uid, "vehicles");
+        const existingVehicles = await getDocs(vehiclesRef);
+        const deleteVehiclePromises = existingVehicles.docs.map((doc) =>
+          deleteDoc(doc.ref)
+        );
+        await Promise.all(deleteVehiclePromises);
+
+        const addVehiclePromises = editProfileData.vehicles.map((vehicle) => {
+          // Convert string dates to Timestamp objects
+          const startDate =
+            typeof vehicle.startDate === "string"
+              ? Timestamp.fromDate(new Date(vehicle.startDate))
+              : vehicle.startDate;
+
+          const endDate =
+            vehicle.isCurrent || !vehicle.endDate
+              ? null
+              : typeof vehicle.endDate === "string"
+              ? Timestamp.fromDate(new Date(vehicle.endDate))
+              : vehicle.endDate;
+
+          return addDoc(vehiclesRef, {
+            type: vehicle.type,
+            numberPlate: vehicle.numberPlate,
+            model: vehicle.model,
+            rcBookNumber: vehicle.rcBookNumber || "",
+            rcBookFileUrls: [],
+            parking: vehicle.parking || false,
+            isCurrent: vehicle.isCurrent,
+            startDate: startDate,
+            endDate: endDate,
+          });
+        });
+        await Promise.all(addVehiclePromises);
+
+        // Update local state
+        setUserData({
+          ...userData,
+          name: editProfileData.name,
+          phone: editProfileData.phone,
+          unitNumber: editProfileData.unitNumber,
+        } as Member);
+
+        // Refresh vehicles list
+        const vehiclesSnapshot = await getDocs(vehiclesRef);
+        const vehiclesData = vehiclesSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Vehicle[];
+        setVehicles(vehiclesData);
+
+        setShowEditProfileModal(false);
+        alert("Profile updated successfully!");
+      } catch (error) {
+        console.error("Error updating profile:", error);
+        alert("Error updating profile. Please try again.");
+      }
+    };
+
+    if (loading) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading your dashboard...</p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow bg-gradient-to-br from-white to-gray-50 relative overflow-hidden">
@@ -1585,14 +2061,8 @@ export default function MemberDashboard() {
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={() =>
-                  onVote(
-                    suggestion.id,
-                    "upvote",
-                    suggestion.votes || { upvotes: 0, downvotes: 0, voters: [] }
-                  )
-                }
-                className={`flex items-center space-x-1 px-3 py-1 rounded-lg text-sm transition-all duration-200 ${
+                onClick={() => onVote(suggestion.id, "upvote")}
+                className={`flex cursor-pointer items-center space-x-1 px-3 py-1 rounded-lg text-sm transition-all duration-200 ${
                   (suggestion.votes?.voters || []).includes(
                     `${user?.uid}_upvote`
                   )
@@ -1614,18 +2084,11 @@ export default function MemberDashboard() {
                     d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905a3.61 3.61 0 01-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"
                   />
                 </svg>
-                <span>{suggestion.votes?.upvotes || 0}</span>
               </button>
 
               <button
-                onClick={() =>
-                  onVote(
-                    suggestion.id,
-                    "downvote",
-                    suggestion.votes || { upvotes: 0, downvotes: 0, voters: [] }
-                  )
-                }
-                className={`flex items-center space-x-1 px-3 py-1 rounded-lg text-sm transition-all duration-200 ${
+                onClick={() => onVote(suggestion.id, "downvote")}
+                className={`flex cursor-pointer items-center space-x-1 px-3 py-1 rounded-lg text-sm transition-all duration-200 ${
                   (suggestion.votes?.voters || []).includes(
                     `${user?.uid}_downvote`
                   )
@@ -1647,7 +2110,6 @@ export default function MemberDashboard() {
                     d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018c-.163 0-.326-.02-.485-.06L17 4m0 0v9m0-9h2.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 13H17m0 0v2a2 2 0 01-2 2h-2"
                   />
                 </svg>
-                <span>{suggestion.votes?.downvotes || 0}</span>
               </button>
             </div>
           </div>
@@ -1812,7 +2274,6 @@ export default function MemberDashboard() {
     setUploadProgress(0);
 
     try {
-      // Upload files to Firebase Storage if any
       let fileUrls: string[] = [];
       if (redevelopmentForm.files.length > 0) {
         // You'll need to implement file upload logic here
@@ -1934,44 +2395,19 @@ export default function MemberDashboard() {
     }
   };
 
-  const renderSafeDate = (timestamp: any): string => {
-    if (!timestamp) return "Not available";
+const renderSafeDate = (value?: Timestamp | string): string => {
+    if (!value) return "Not available";
 
-    // Handle Firestore Timestamp
-    if (timestamp && typeof timestamp.toDate === "function") {
-      return timestamp.toDate().toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
+    const date = value instanceof Timestamp ? value.toDate() : new Date(value);
+
+    if (isNaN(date.getTime())) {
+      return "Invalid date";
     }
 
-    // Handle JavaScript Date
-    if (timestamp instanceof Date) {
-      return timestamp.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-    }
-
-    // Handle string dates
-    if (typeof timestamp === "string") {
-      try {
-        const date = new Date(timestamp);
-        return isNaN(date.getTime())
-          ? timestamp
-          : date.toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            });
-      } catch {
-        return timestamp;
-      }
-    }
-
-    return String(timestamp);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
   };
 
   //   const handleMakePayment = async (paymentId: string, amount: number, type: string = 'Maintenance') => {
@@ -2079,7 +2515,6 @@ export default function MemberDashboard() {
       });
       await Promise.all(addVehiclePromises);
 
-      // Update local state
       setUserData({
         ...userData,
         name: editProfileData.name,
@@ -2087,12 +2522,15 @@ export default function MemberDashboard() {
         unitNumber: editProfileData.unitNumber,
       });
 
-      // Refresh vehicles list
       const vehiclesSnapshot = await getDocs(vehiclesRef);
-      const vehiclesData = vehiclesSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const vehiclesData: Vehicle[] = vehiclesSnapshot.docs.map((doc) => {
+        const data = doc.data() as Omit<Vehicle, "id">;
+        return {
+          id: doc.id,
+          ...data,
+        };
+      });
+
       setVehicles(vehiclesData);
 
       setShowEditProfileModal(false);
@@ -2103,14 +2541,19 @@ export default function MemberDashboard() {
     }
   };
 
-  const getDateFromFirestore = (timestamp: any) => {
+  const getDateFromFirestore = (
+    timestamp: Timestamp | Date | null | undefined
+  ): Date | null => {
     if (!timestamp) return null;
-    if (typeof timestamp.toDate === "function") {
+
+    if (timestamp instanceof Timestamp) {
       return timestamp.toDate();
     }
+
     if (timestamp instanceof Date) {
       return timestamp;
     }
+
     return null;
   };
 
@@ -3229,114 +3672,28 @@ export default function MemberDashboard() {
                         </h4>
 
                         <div className="space-y-3 mb-4 max-h-40 overflow-y-auto">
-                          {form.comments &&
-                            form.comments.map(
-                              (comment: {
-                                id: Key | null | undefined;
-                                userType:
-                                  | string
-                                  | number
-                                  | bigint
-                                  | boolean
-                                  | ReactElement<
-                                      unknown,
-                                      string | JSXElementConstructor<any>
-                                    >
-                                  | Iterable<ReactNode>
-                                  | Promise<
-                                      | string
-                                      | number
-                                      | bigint
-                                      | boolean
-                                      | ReactPortal
-                                      | ReactElement<
-                                          unknown,
-                                          string | JSXElementConstructor<any>
-                                        >
-                                      | Iterable<ReactNode>
-                                      | null
-                                      | undefined
-                                    >
-                                  | null
-                                  | undefined;
-                                userName:
-                                  | string
-                                  | number
-                                  | bigint
-                                  | boolean
-                                  | ReactElement<
-                                      unknown,
-                                      string | JSXElementConstructor<any>
-                                    >
-                                  | Iterable<ReactNode>
-                                  | ReactPortal
-                                  | Promise<
-                                      | string
-                                      | number
-                                      | bigint
-                                      | boolean
-                                      | ReactPortal
-                                      | ReactElement<
-                                          unknown,
-                                          string | JSXElementConstructor<any>
-                                        >
-                                      | Iterable<ReactNode>
-                                      | null
-                                      | undefined
-                                    >
-                                  | null
-                                  | undefined;
-                                timestamp: Timestamp | undefined;
-                                comment:
-                                  | string
-                                  | number
-                                  | bigint
-                                  | boolean
-                                  | ReactElement<
-                                      unknown,
-                                      string | JSXElementConstructor<any>
-                                    >
-                                  | Iterable<ReactNode>
-                                  | ReactPortal
-                                  | Promise<
-                                      | string
-                                      | number
-                                      | bigint
-                                      | boolean
-                                      | ReactPortal
-                                      | ReactElement<
-                                          unknown,
-                                          string | JSXElementConstructor<any>
-                                        >
-                                      | Iterable<ReactNode>
-                                      | null
-                                      | undefined
-                                    >
-                                  | null
-                                  | undefined;
-                              }) => (
-                                <div
-                                  key={comment.id}
-                                  className={`p-3 rounded-lg ${
-                                    comment.userType === "admin"
-                                      ? "bg-blue-50 border border-blue-100"
-                                      : "bg-gray-50 border border-gray-100"
-                                  }`}
-                                >
-                                  <div className="flex justify-between items-start">
-                                    <span className="font-medium text-black text-sm">
-                                      {comment.userName} ({comment.userType})
-                                    </span>
-                                    <span className="text-xs text-black text-gray-500">
-                                      {formatDateTime(comment.timestamp)}
-                                    </span>
-                                  </div>
-                                  <p className="text-sm text-black mt-1">
-                                    {comment.comment}
-                                  </p>
-                                </div>
-                              )
-                            )}
+                          {form.comments?.map((comment: Comment) => (
+                            <div
+                              key={comment.id}
+                              className={`p-3 rounded-lg ${
+                                comment.userType === "admin"
+                                  ? "bg-blue-50 border border-blue-100"
+                                  : "bg-gray-50 border border-gray-100"
+                              }`}
+                            >
+                              <div className="flex justify-between items-start">
+                                <span className="font-medium text-black text-sm">
+                                  {comment.userName} ({comment.userType})
+                                </span>
+                                <span className="text-xs text-black text-gray-500">
+                                  {formatDateTime(comment.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-black mt-1">
+                                {comment.comment}
+                              </p>
+                            </div>
+                          ))}
 
                           {(form.comments || []).length === 0 && (
                             <p className="text-gray-500 text-center py-2">
@@ -3739,8 +4096,8 @@ export default function MemberDashboard() {
                     No complaints yet
                   </h3>
                   <p className="text-gray-500 max-w-md mx-auto mb-6">
-                    You haven't raised any complaints yet. Start by reporting an
-                    issue you've encountered.
+                    You haven&apos;t raised any complaints yet. Start by
+                    reporting an issue you&apos;ve encountered.
                   </p>
                   <button
                     onClick={() => setShowComplaintModal(true)}
@@ -4023,8 +4380,8 @@ export default function MemberDashboard() {
                     No payment records
                   </h3>
                   <p className="text-gray-500 max-w-md mx-auto">
-                    You don't have any payment records yet. All transactions
-                    will appear here.
+                    You don&apos;t have any payment records yet. All
+                    transactions will appear here.
                   </p>
                 </div>
               ) : (
@@ -4141,7 +4498,7 @@ export default function MemberDashboard() {
               <div className="space-y-6">
                 {notices.length === 0 ? (
                   <div className="text-center py-12">
-                    <div className="mx-auto h-24 w-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <div className="mx-auto text-black h-24 w-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                       <NoticesIcon />
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -4416,7 +4773,7 @@ export default function MemberDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
-                      {filteredVehicles.map((vehicle: any) => (
+                      {filteredVehicles.map((vehicle: Vehicle) => (
                         <tr
                           key={vehicle.id}
                           className="hover:bg-blue-50/30 transition-colors duration-150 group"
@@ -4451,12 +4808,7 @@ export default function MemberDashboard() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div>
-                              Start: {renderSafeDate(vehicle.startDate)}
-                            </div>
-                            {vehicle.endDate && (
-                              <div>End: {renderSafeDate(vehicle.endDate)}</div>
-                            )}
+                            End: {vehicle.endDate ? renderSafeDate(vehicle.endDate) : "-"}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span
@@ -4479,7 +4831,7 @@ export default function MemberDashboard() {
                                   );
                                   if (endDate) {
                                     handleUpdateVehicleStatus(
-                                      vehicle.id,
+                                      vehicle.id!,
                                       false,
                                       endDate
                                     );
@@ -4492,7 +4844,7 @@ export default function MemberDashboard() {
                             ) : (
                               <button
                                 onClick={() =>
-                                  handleUpdateVehicleStatus(vehicle.id, true)
+                                  handleUpdateVehicleStatus(vehicle.id!, true)
                                 }
                                 className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
                               >
@@ -5231,7 +5583,7 @@ export default function MemberDashboard() {
                         </div>
                       </div>
                       <p className="text-gray-700 italic mb-4">
-                        "{testimonial.content}"
+                        &quot;{testimonial.content}&quot;
                       </p>
                       <div className="flex items-center">
                         <div className="h-10 w-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold mr-3">
@@ -6282,15 +6634,10 @@ export default function MemberDashboard() {
                               type="number"
                               value={member.age}
                               onChange={(e) => {
-                                const updatedMembers = [
-                                  ...editProfileData.familyMembers,
-                                ];
-                                updatedMembers[index].age =
-                                  Number(e.target.value) || 0;
-                                setEditProfileData({
-                                  ...editProfileData,
-                                  familyMembers: updatedMembers,
-                                });
+                                const newAge = Number(e.target.value);
+                                const updatedMembers = [...editProfileData.familyMembers];
+                                updatedMembers[index].age = newAge;
+                                setEditProfileData({ ...editProfileData, familyMembers: updatedMembers });
                               }}
                               className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
                               placeholder="Age"

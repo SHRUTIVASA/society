@@ -1,4 +1,3 @@
-// app/bylaws/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -8,11 +7,29 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "../lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-const generatePDF = async (bylawsContent: any, sections: any) => {
+type BylawItem = {
+  title: string;
+  text: string;
+};
+
+type BylawSection = {
+  title: string;
+  content: BylawItem[];
+};
+
+type BylawsContent = {
+  [key: string]: BylawSection;
+};
+
+type Section = {
+  id: string;
+  title: string;
+};
+
+const generatePDF = async (bylawsContent: BylawsContent, sections: Section[]) => {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF();
 
-  // Set properties
   doc.setProperties({
     title: "YeshKrupa Society Bylaws",
     subject: "Official bylaws document",
@@ -40,27 +57,25 @@ const generatePDF = async (bylawsContent: any, sections: any) => {
   doc.setFontSize(12);
   doc.setTextColor(0, 0, 0);
 
-  sections.forEach((section: any) => {
+  sections.forEach((section: Section) => {
     const sectionData = bylawsContent[section.id as keyof typeof bylawsContent];
+    if (!sectionData) return;
 
-    // Check if we need a new page
     if (yPosition > pageHeight - 40) {
       doc.addPage();
       yPosition = 20;
     }
 
-    // Section title
     doc.setFontSize(14);
     doc.setTextColor(21, 34, 56);
     doc.text(sectionData.title, margin, yPosition);
     yPosition += 10;
 
-    // Section content
     doc.setFontSize(11);
     doc.setTextColor(0, 0, 0);
 
-    sectionData.content.forEach((item: any) => {
-      // Check if we need a new page
+    sectionData.content.forEach((item: BylawItem) => {
+ 
       if (yPosition > pageHeight - 40) {
         doc.addPage();
         yPosition = 20;
@@ -396,7 +411,7 @@ export default function Bylaws() {
               </h2>
               <button
                 onClick={() => setShowLocationMapModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 ✖
               </button>
@@ -441,7 +456,7 @@ export default function Bylaws() {
                   setContactError("");
                   setContactSuccess("");
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
                 disabled={isSubmitting}
               >
                 ✖
@@ -537,7 +552,7 @@ export default function Bylaws() {
 
                 <button
                   type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-center transition-colors flex items-center justify-center"
+                  className="w-full cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-center transition-colors flex items-center justify-center"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -598,7 +613,7 @@ export default function Bylaws() {
                   <li key={section.id}>
                     <button
                       onClick={() => setActiveSection(section.id)}
-                      className={`w-full text-left py-2 px-4 rounded-lg transition-colors ${
+                      className={`w-full cursor-pointer text-left py-2 px-4 rounded-lg transition-colors ${
                         activeSection === section.id
                           ? "bg-[#152238] text-white"
                           : "text-gray-700 hover:bg-gray-100"
@@ -613,7 +628,7 @@ export default function Bylaws() {
               <div className="mt-6 pt-4 border-t border-gray-200">
                 <button
                   onClick={() => handleNavigation("/")}
-                  className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                  className="flex items-center text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -668,7 +683,7 @@ export default function Bylaws() {
                     if (currentIndex > 0)
                       setActiveSection(sections[currentIndex - 1].id);
                   }}
-                  className="flex items-center text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   disabled={activeSection === sections[0].id}
                 >
                   <svg
@@ -696,7 +711,7 @@ export default function Bylaws() {
                     if (currentIndex < sections.length - 1)
                       setActiveSection(sections[currentIndex + 1].id);
                   }}
-                  className="flex items-center text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   disabled={activeSection === sections[sections.length - 1].id}
                 >
                   Next Section
@@ -731,7 +746,7 @@ export default function Bylaws() {
                 </div>
                 <button
                   onClick={downloadPDF}
-                  className="mt-4 md:mt-0 px-6 py-3 bg-[#152238] text-white rounded-lg hover:bg-[#1f2d4a] transition-colors flex items-center"
+                  className="mt-4 md:mt-0 px-6 py-3 bg-[#152238] text-white rounded-lg hover:bg-[#1f2d4a] transition-colors flex items-center cursor-pointer"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -880,13 +895,13 @@ export default function Bylaws() {
             <div className="flex space-x-6">
               <button
                 onClick={() => setShowLocationMapModal(true)}
-                className="text-gray-600 hover:text-blue-600 text-sm transition-colors duration-300"
+                className="text-gray-600 hover:text-blue-600 text-sm transition-colors duration-300 cursor-pointer"
               >
                 Our Location
               </button>
               <button
                 onClick={() => setShowContactModal(true)}
-                className="text-gray-600 hover:text-blue-600 text-sm transition-colors duration-300"
+                className="text-gray-600 hover:text-blue-600 text-sm transition-colors duration-300 cursor-pointer"
               >
                 Contact Us
               </button>

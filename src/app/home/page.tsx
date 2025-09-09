@@ -102,50 +102,50 @@ export default function Home() {
     fetchFaqs();
   }, []);
 
-const handleForgotPassword = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setResetError("");
-  setResetSuccess("");
-  setIsResetting(true);
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError("");
+    setResetSuccess("");
+    setIsResetting(true);
 
-  try {
-    const adminsQuery = query(
-      collection(db, "admins"),
-      where("email", "==", resetEmail)
-    );
+    try {
+      const adminsQuery = query(
+        collection(db, "admins"),
+        where("email", "==", resetEmail)
+      );
 
-    const membersQuery = query(
-      collection(db, "members"),
-      where("email", "==", resetEmail)
-    );
+      const membersQuery = query(
+        collection(db, "members"),
+        where("email", "==", resetEmail)
+      );
 
-    const [adminsSnapshot, membersSnapshot] = await Promise.all([
-      getDocs(adminsQuery),
-      getDocs(membersQuery),
-    ]);
+      const [adminsSnapshot, membersSnapshot] = await Promise.all([
+        getDocs(adminsQuery),
+        getDocs(membersQuery),
+      ]);
 
-    let userEmail = "";
+      let userEmail = "";
 
-    if (!adminsSnapshot.empty) {
-      userEmail = adminsSnapshot.docs[0].data().email;
-    } else if (!membersSnapshot.empty) {
-      userEmail = membersSnapshot.docs[0].data().email;
-    } else {
-      setResetError("Email/Unit number not found");
+      if (!adminsSnapshot.empty) {
+        userEmail = adminsSnapshot.docs[0].data().email;
+      } else if (!membersSnapshot.empty) {
+        userEmail = membersSnapshot.docs[0].data().email;
+      } else {
+        setResetError("Email/Unit number not found");
+        setIsResetting(false);
+        return;
+      }
+
+      await sendPasswordResetEmail(auth, userEmail);
+      setResetSuccess("Password reset email sent! Check your inbox.");
+      setResetEmail("");
+    } catch (err) {
+      const error = err as FirebaseError;
+      setResetError(error.message);
+    } finally {
       setIsResetting(false);
-      return;
     }
-
-    await sendPasswordResetEmail(auth, userEmail);
-    setResetSuccess("Password reset email sent! Check your inbox.");
-    setResetEmail("");
-  } catch (err) {
-    const error = err as FirebaseError
-    setResetError(error.message);
-  } finally {
-    setIsResetting(false);
-  }
-};
+  };
 
   const fetchAllTestimonials = async () => {
     try {
@@ -194,66 +194,70 @@ const handleForgotPassword = async (e: React.FormEvent) => {
     };
   }, []);
 
-const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError("");
-  setIsLoading(true);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
 
-  try {
-    const adminsQuery = query(
-      collection(db, "admins"),
-      where("unitNumber", "==", email) 
-    );
-    
-    const membersQuery = query(
-      collection(db, "members"),
-      where("unitNumber", "==", email) 
-    );
+    try {
+      const adminsQuery = query(
+        collection(db, "admins"),
+        where("unitNumber", "==", email)
+      );
 
-    const [adminsSnapshot, membersSnapshot] = await Promise.all([
-      getDocs(adminsQuery),
-      getDocs(membersQuery)
-    ]);
+      const membersQuery = query(
+        collection(db, "members"),
+        where("unitNumber", "==", email)
+      );
 
-    let userEmail = "";
-    let isAdmin = false;
+      const [adminsSnapshot, membersSnapshot] = await Promise.all([
+        getDocs(adminsQuery),
+        getDocs(membersQuery),
+      ]);
 
-    // Check if unitNumber exists in admins collection
-    if (!adminsSnapshot.empty) {
-      const adminDoc = adminsSnapshot.docs[0];
-      userEmail = adminDoc.data().email;
-      isAdmin = true;
-    } 
-    // Check if unitNumber exists in members collection
-    else if (!membersSnapshot.empty) {
-      const memberDoc = membersSnapshot.docs[0];
-      userEmail = memberDoc.data().email;
-      isAdmin = false;
-    } 
-    // If unitNumber not found in either collection
-    else {
-      setError("Invalid unit number or password");
+      let userEmail = "";
+      let isAdmin = false;
+
+      // Check if unitNumber exists in admins collection
+      if (!adminsSnapshot.empty) {
+        const adminDoc = adminsSnapshot.docs[0];
+        userEmail = adminDoc.data().email;
+        isAdmin = true;
+      }
+      // Check if unitNumber exists in members collection
+      else if (!membersSnapshot.empty) {
+        const memberDoc = membersSnapshot.docs[0];
+        userEmail = memberDoc.data().email;
+        isAdmin = false;
+      }
+      // If unitNumber not found in either collection
+      else {
+        setError("Invalid unit number or password");
+        setIsLoading(false);
+        return;
+      }
+
+      // Now sign in with the email found in the document
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        userEmail,
+        password
+      );
+      const user = userCredential.user;
+      setIsLoggedIn(true);
+
+      if (isAdmin) {
+        router.push("/admin");
+      } else {
+        router.push("/member");
+      }
+    } catch (err) {
+      const error = err as FirebaseError;
+      setError(error.message);
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    // Now sign in with the email found in the document
-    const userCredential = await signInWithEmailAndPassword(auth, userEmail, password);
-    const user = userCredential.user;
-    setIsLoggedIn(true);
-
-    if (isAdmin) {
-      router.push("/admin");
-    } else {
-      router.push("/member");
-    }
-  } catch (err) {
-    const error = err as FirebaseError
-    setError(error.message);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     const fetchPreviewTestimonials = async () => {
@@ -502,7 +506,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   setContactError("");
                   setContactSuccess("");
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
                 disabled={isSubmitting}
               >
                 ✖
@@ -645,7 +649,7 @@ const handleLogin = async (e: React.FormEvent) => {
               </h2>
               <button
                 onClick={() => setShowLocationMapModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 ✖
               </button>
@@ -680,17 +684,15 @@ const handleLogin = async (e: React.FormEvent) => {
       <main className="container mx-auto px-4 py-8">
         {/* Grid section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          <div className="md:col-span-2 rounded-xl overflow-hidden shadow-lg">
-            <div className="relative h-80">
-              <Image
-                src={imageSlides[currentIndex]}
-                alt="Society gallery"
-                className="w-full h-full object-cover"
-                fill
-                priority={currentIndex === 0}
-              />
-              <div className="absolute inset-0 flex items-center justify-center text-white text-xl font-light bg-black/40"></div>
-            </div>
+          <div className="md:col-span-2 rounded-xl overflow-hidden shadow-lg h-100 w-full relative">
+            <Image
+              src={imageSlides[currentIndex]}
+              alt="Society gallery"
+              className="object-cover"
+              fill
+              priority={currentIndex === 0}
+            />
+            <div className="absolute inset-0 flex items-center justify-center text-white text-xl font-light bg-black/40"></div>
           </div>
 
           {/* ✅ Login Box (Desktop) */}
@@ -833,12 +835,10 @@ const handleLogin = async (e: React.FormEvent) => {
                         disabled={isResetting}
                       />
                     </div>
-
                     <p className="text-gray-600 text-sm mb-4">
-                      Enter your email address and we'll send you a link to
+                      Enter your email address and we&apos;ll send you a link to
                       reset your password.
                     </p>
-
                     <button
                       type="submit"
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-center transition-colors flex items-center justify-center cursor-pointer"
@@ -901,15 +901,15 @@ const handleLogin = async (e: React.FormEvent) => {
                       Username
                     </label>
                     <input
-                    id="email"
-                    type="text"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                    placeholder="Enter your unit number"
-                    required
-                    disabled={isLoading}
-                  />
+                      id="email"
+                      type="text"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                      placeholder="Enter your unit number"
+                      required
+                      disabled={isLoading}
+                    />
                   </div>
                   <div className="mb-6">
                     <label
@@ -1232,7 +1232,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
                       {/* Content */}
                       <p className="text-gray-600 italic mb-1">
-                        "{testimonial.content}"
+                        &quot;{testimonial.content}&quot;
                       </p>
                       <p className="text-sm text-gray-700 font-medium">
                         - {testimonial.name}, {testimonial.unit}
@@ -1252,7 +1252,7 @@ const handleLogin = async (e: React.FormEvent) => {
                   setShowTestimonialsModal(true);
                   fetchAllTestimonials();
                 }}
-                className="mt-4 text-blue-600 hover:underline flex items-center"
+                className="mt-4 text-blue-600 hover:underline flex items-center cursor-pointer"
               >
                 View all testimonials
                 <svg
@@ -1281,7 +1281,7 @@ const handleLogin = async (e: React.FormEvent) => {
                     </h2>
                     <button
                       onClick={() => setShowTestimonialsModal(false)}
-                      className="text-gray-400 hover:text-gray-600 text-xl"
+                      className="text-gray-400 hover:text-gray-600 text-xl cursor-pointer"
                     >
                       ✖
                     </button>
@@ -1299,7 +1299,7 @@ const handleLogin = async (e: React.FormEvent) => {
                           className="bg-gray-50 p-6 rounded-lg hover:shadow-md transition-shadow"
                         >
                           <p className="text-gray-600 italic mb-4">
-                            "{testimonial.content}"
+                            &quot;{testimonial.content}&quot;
                           </p>
                           <p className="text-sm text-gray-700 font-medium">
                             - {testimonial.name}, {testimonial.unit}
@@ -1374,7 +1374,7 @@ const handleLogin = async (e: React.FormEvent) => {
               </h2>
               <button
                 onClick={() => setShowFaqsModal(false)}
-                className="text-gray-400 hover:text-gray-600 text-xl"
+                className="text-gray-400 hover:text-gray-600 text-xl cursor-pointer"
               >
                 ✖
               </button>

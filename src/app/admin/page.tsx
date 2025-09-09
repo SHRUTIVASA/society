@@ -22,8 +22,10 @@ import {
   onSnapshot,
   writeBatch,
   arrayUnion,
+  FieldValue,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 
 // ==============================
 // INTERFACE DEFINITIONS
@@ -1716,7 +1718,8 @@ export default function AdminDashboard() {
       fetchData();
 
       alert("Member added successfully! Temporary password: TempPassword123");
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as FirebaseError;
       console.error("Error adding member:", error);
 
       if (error.code === "auth/email-already-in-use") {
@@ -1834,7 +1837,7 @@ export default function AdminDashboard() {
   ) => {
     try {
       const paymentDocRef = doc(db, "payments", memberId);
-      const updateData: any = {
+      const updateData: Record<string, string | FieldValue | undefined> = {
         [`${transactionId}.status`]: status,
         [`${transactionId}.updatedAt`]: serverTimestamp(),
       };
@@ -2021,7 +2024,7 @@ export default function AdminDashboard() {
         numberPlate: newVehicle.numberPlate,
         parking: newVehicle.parking,
         startDate: newVehicle.startDate,
-        endDate: Timestamp.now(),  
+        endDate: Timestamp.now(),
         isCurrent: newVehicle.isCurrent,
         createdAt: serverTimestamp(),
         rcBookNumber: "",
@@ -2056,39 +2059,42 @@ export default function AdminDashboard() {
     }
   };
 
-const handleUpdateVehicleStatus = async (
-  memberId: string,
-  vehicleId: string,
-  isCurrent: boolean,
-  endDate?: Timestamp 
-) => {
-  try {
-    const vehicleRef = doc(db, "members", memberId, "vehicles", vehicleId);
+  const handleUpdateVehicleStatus = async (
+    memberId: string,
+    vehicleId: string,
+    isCurrent: boolean,
+    endDate?: Timestamp
+  ) => {
+    try {
+      const vehicleRef = doc(db, "members", memberId, "vehicles", vehicleId);
 
-    const updateData: any = {
-      isCurrent,
-      updatedAt: serverTimestamp(),
-    };
+      const updateData: {
+        isCurrent: boolean;
+        updatedAt: FieldValue;
+        endDate?: Timestamp | FieldValue;
+      } = {
+        isCurrent,
+        updatedAt: serverTimestamp(),
+      };
 
-    if (isCurrent) {
-      updateData.endDate = deleteField();
-    } else if (endDate) {
-      updateData.endDate = endDate;
-    } else {
-      updateData.endDate = Timestamp.now();
+      if (isCurrent) {
+        updateData.endDate = deleteField();
+      } else if (endDate) {
+        updateData.endDate = endDate;
+      } else {
+        updateData.endDate = Timestamp.now();
+      }
+
+      await updateDoc(vehicleRef, updateData);
+
+      fetchVehicles();
+
+      alert("Vehicle status updated successfully!");
+    } catch (error) {
+      console.error("Error updating vehicle status:", error);
+      alert("Failed to update vehicle status. Please try again.");
     }
-
-    await updateDoc(vehicleRef, updateData);
-
-    fetchVehicles();
-
-    alert("Vehicle status updated successfully!");
-  } catch (error) {
-    console.error("Error updating vehicle status:", error);
-    alert("Failed to update vehicle status. Please try again.");
-  }
-};
-
+  };
 
   const handleDeleteVehicle = async (memberId: string, vehicleId: string) => {
     try {
@@ -2219,30 +2225,34 @@ const handleUpdateVehicleStatus = async (
     );
   };
 
-const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
-  try {
-    const updateData: any = {
-      isActive: !isActive,
-      updatedAt: serverTimestamp(),
-    };
+  const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
+    try {
+      const updateData: {
+        isActive: boolean;
+        updatedAt: FieldValue;
+        joiningDate?: FieldValue;
+      } = {
+        isActive: !isActive,
+        updatedAt: serverTimestamp(),
+      };
 
-    if (!isActive) {
-      updateData.joiningDate = serverTimestamp();
+      if (!isActive) {
+        updateData.joiningDate = serverTimestamp();
+      }
+
+      await updateDoc(doc(db, "serviceProviders", id), updateData);
+
+      fetchServiceProviders();
+      alert(
+        `Service provider ${
+          !isActive ? "activated" : "deactivated"
+        } successfully!`
+      );
+    } catch (error) {
+      console.error("Error toggling service provider status:", error);
+      alert("Failed to update service provider status. Please try again.");
     }
-
-    await updateDoc(doc(db, "serviceProviders", id), updateData);
-
-    fetchServiceProviders();
-    alert(
-      `Service provider ${
-        !isActive ? "activated" : "deactivated"
-      } successfully!`
-    );
-  } catch (error) {
-    console.error("Error toggling service provider status:", error);
-    alert("Failed to update service provider status. Please try again.");
-  }
-};
+  };
 
   // Document Functions
   const handleUploadDocument = async (e: React.FormEvent) => {
@@ -2444,7 +2454,8 @@ const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
       fetchAdmins();
 
       alert("Admin added successfully! Username: " + newAdmin.email);
-    } catch (error: any) {
+    } catch (err) {
+      const error = err as FirebaseError;
       console.error("Error adding admin:", error);
       alert("Failed to add admin: " + error.message);
     } finally {
@@ -2512,7 +2523,10 @@ const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
     try {
       const suggestionRef = doc(db, "suggestions", suggestionId);
 
-      const updateData: any = {
+      const updateData: {
+        status: Suggestion["status"];
+        updatedAt: Timestamp;
+      } = {
         status,
         updatedAt: Timestamp.now(),
       };
@@ -2992,6 +3006,7 @@ const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
           break;
         case "complaint":
           const [memId, complaintId] = itemId.split("_");
+
           const complaintRef = doc(db, "complaints", memId);
           const complaintDoc = await getDoc(complaintRef);
 
@@ -3003,6 +3018,10 @@ const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
               await setDoc(complaintRef, updatedData);
             }
           }
+
+          const complaintChatRef = doc(db, "complaintChats", complaintId);
+          await deleteDoc(complaintChatRef);
+
           break;
         case "query":
           await deleteDoc(doc(db, "queries", itemId));
@@ -3287,50 +3306,49 @@ const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
   // USE EFFECT HOOKS
   // ==============================
 
-useEffect(() => {
-  const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-    if (firebaseUser) {
-      try {
-        const docRef = doc(db, "admins", firebaseUser.uid);
-        const docSnap = await getDoc(docRef);
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const docRef = doc(db, "admins", firebaseUser.uid);
+          const docSnap = await getDoc(docRef);
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setUser(firebaseUser);
-          setAdminDetails({
-            id: docSnap.id,
-            name: data.name || "",
-            email: data.email || "",
-            unitNumber: data.unitNumber || "",
-            position: data.position || "",
-            adminPosition: data.adminPosition || "",
-          });
-          setIsAdmin(true);
-          setLoading(false); // Move this here
-          await fetchData(); // Fetch data after successful auth
-        } else {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUser(firebaseUser);
+            setAdminDetails({
+              id: docSnap.id,
+              name: data.name || "",
+              email: data.email || "",
+              unitNumber: data.unitNumber || "",
+              position: data.position || "",
+              adminPosition: data.adminPosition || "",
+            });
+            setIsAdmin(true);
+            setLoading(false); // Move this here
+            await fetchData(); // Fetch data after successful auth
+          } else {
+            setIsAdmin(false);
+            setLoading(false);
+            router.push("/");
+          }
+        } catch (err) {
+          console.error("Error checking admin:", err);
           setIsAdmin(false);
           setLoading(false);
           router.push("/");
         }
-      } catch (err) {
-        console.error("Error checking admin:", err);
+      } else {
+        // Not logged in
+        setUser(null);
         setIsAdmin(false);
         setLoading(false);
         router.push("/");
       }
-    } else {
-      // Not logged in
-      setUser(null);
-      setIsAdmin(false);
-      setLoading(false);
-      router.push("/");
-    }
-  });
+    });
 
-  return () => unsubscribe();
-}, [router]);
-
+    return () => unsubscribe();
+  }, [router]);
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -7579,28 +7597,33 @@ useEffect(() => {
                           />
                         </div>
 
-                       <div>
-  <label className="block text-sm font-medium text-gray-700 mb-1">
-    Due Date
-  </label>
-  <input
-    type="date"
-    required
-    value={
-      newPayment.dueDate
-        ? newPayment.dueDate.toDate().toISOString().split("T")[0] 
-        : ""
-    }
-    onChange={(e) =>
-      setNewPayment({
-        ...newPayment,
-        dueDate: Timestamp.fromDate(new Date(e.target.value)), 
-      })
-    }
-    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-    placeholder="Due Date"
-  />
-</div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Due Date
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={
+                              newPayment.dueDate
+                                ? newPayment.dueDate
+                                    .toDate()
+                                    .toISOString()
+                                    .split("T")[0]
+                                : ""
+                            }
+                            onChange={(e) =>
+                              setNewPayment({
+                                ...newPayment,
+                                dueDate: Timestamp.fromDate(
+                                  new Date(e.target.value)
+                                ),
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Due Date"
+                          />
+                        </div>
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -8452,61 +8475,71 @@ useEffect(() => {
                               {vehicle.isCurrent ? "Current" : "Past"}
                             </span>
                           </td>
-                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-  {vehicle.isCurrent ? (
-    <button
-      onClick={() => {
-        const endDateStr = prompt(
-          "Enter end date (YYYY-MM-DD):",
-          new Date().toISOString().split("T")[0]
-        );
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {vehicle.isCurrent ? (
+                              <button
+                                onClick={() => {
+                                  const endDateStr = prompt(
+                                    "Enter end date (YYYY-MM-DD):",
+                                    new Date().toISOString().split("T")[0]
+                                  );
 
-        if (endDateStr) {
-          const endDate = (() => {
-            const [year, month, day] = endDateStr.split("-").map(Number);
-            const now = new Date();
-            const dateWithTime = new Date(
-              year,
-              month - 1,
-              day,
-              now.getHours(),
-              now.getMinutes(),
-              now.getSeconds(),
-              now.getMilliseconds()
-            );
-            return Timestamp.fromDate(dateWithTime);
-          })();
+                                  if (endDateStr) {
+                                    const endDate = (() => {
+                                      const [year, month, day] = endDateStr
+                                        .split("-")
+                                        .map(Number);
+                                      const now = new Date();
+                                      const dateWithTime = new Date(
+                                        year,
+                                        month - 1,
+                                        day,
+                                        now.getHours(),
+                                        now.getMinutes(),
+                                        now.getSeconds(),
+                                        now.getMilliseconds()
+                                      );
+                                      return Timestamp.fromDate(dateWithTime);
+                                    })();
 
-          handleUpdateVehicleStatus(
-            vehicle.memberId,
-            vehicle.id,
-            false,
-            endDate
-          );
-        }
-      }}
-      className="text-orange-600 hover:text-orange-900 mr-3 cursor-pointer"
-    >
-      Mark as Past
-    </button>
-  ) : (
-    <button
-      onClick={() =>
-        handleUpdateVehicleStatus(vehicle.memberId, vehicle.id, true)
-      }
-      className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
-    >
-      Mark as Current
-    </button>
-  )}
-  <button
-    onClick={() => handleDeleteVehicle(vehicle.memberId, vehicle.id)}
-    className="text-red-600 hover:text-red-900 cursor-pointer"
-  >
-    Delete
-  </button>
-</td>
-
+                                    handleUpdateVehicleStatus(
+                                      vehicle.memberId,
+                                      vehicle.id,
+                                      false,
+                                      endDate
+                                    );
+                                  }
+                                }}
+                                className="text-orange-600 hover:text-orange-900 mr-3 cursor-pointer"
+                              >
+                                Mark as Past
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  handleUpdateVehicleStatus(
+                                    vehicle.memberId,
+                                    vehicle.id,
+                                    true
+                                  )
+                                }
+                                className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
+                              >
+                                Mark as Current
+                              </button>
+                            )}
+                            <button
+                              onClick={() =>
+                                handleDeleteVehicle(
+                                  vehicle.memberId,
+                                  vehicle.id
+                                )
+                              }
+                              className="text-red-600 hover:text-red-900 cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -8705,20 +8738,26 @@ useEffect(() => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Start Date
                       </label>
-<input
-  type="date"
-  required
-  value={
-    newVehicle.startDate
-      ? newVehicle.startDate.toDate().toISOString().split("T")[0].slice(0, 16) 
-      : ""
-  }
-  onChange={(e) =>
-    setNewVehicle({
-      ...newVehicle,
-      startDate: timestampWithDateAndCurrentTime(e.target.value),
-    })
-  }
+                      <input
+                        type="date"
+                        required
+                        value={
+                          newVehicle.startDate
+                            ? newVehicle.startDate
+                                .toDate()
+                                .toISOString()
+                                .split("T")[0]
+                                .slice(0, 16)
+                            : ""
+                        }
+                        onChange={(e) =>
+                          setNewVehicle({
+                            ...newVehicle,
+                            startDate: timestampWithDateAndCurrentTime(
+                              e.target.value
+                            ),
+                          })
+                        }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
