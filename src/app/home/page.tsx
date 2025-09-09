@@ -5,6 +5,7 @@ import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import {
@@ -42,6 +43,7 @@ export default function Home() {
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
 
   // Contact form state
   const [contactName, setContactName] = useState("");
@@ -59,7 +61,7 @@ export default function Home() {
     unit: string;
     content: string;
     rating: number;
-    createdAt: Timestamp | any;
+    createdAt: Timestamp;
     approved: boolean;
   }
 
@@ -69,8 +71,6 @@ export default function Home() {
     answer: string;
     order: number;
   }
-
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
 
   const fetchFaqs = async () => {
     try {
@@ -139,8 +139,9 @@ const handleForgotPassword = async (e: React.FormEvent) => {
     await sendPasswordResetEmail(auth, userEmail);
     setResetSuccess("Password reset email sent! Check your inbox.");
     setResetEmail("");
-  } catch (err: any) {
-    setResetError(err.message);
+  } catch (err) {
+    const error = err as FirebaseError
+    setResetError(error.message);
   } finally {
     setIsResetting(false);
   }
@@ -199,15 +200,14 @@ const handleLogin = async (e: React.FormEvent) => {
   setIsLoading(true);
 
   try {
-    // First, check if the unitNumber exists in either admins or members collection
     const adminsQuery = query(
       collection(db, "admins"),
-      where("unitNumber", "==", email) // Using email field for unitNumber input
+      where("unitNumber", "==", email) 
     );
     
     const membersQuery = query(
       collection(db, "members"),
-      where("unitNumber", "==", email) // Using email field for unitNumber input
+      where("unitNumber", "==", email) 
     );
 
     const [adminsSnapshot, membersSnapshot] = await Promise.all([
@@ -247,8 +247,9 @@ const handleLogin = async (e: React.FormEvent) => {
     } else {
       router.push("/member");
     }
-  } catch (err: any) {
-    setError(err.message);
+  } catch (err) {
+    const error = err as FirebaseError
+    setError(error.message);
   } finally {
     setIsLoading(false);
   }
