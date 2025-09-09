@@ -129,6 +129,19 @@ interface Vehicle {
   memberName?: string;
 }
 
+interface Tenant {
+  id?: string;
+  name: string;
+  phone: string;
+  email: string;
+  aadhaarNumber?: string;
+  panNumber?: string;
+  agreementStartDate: string;
+  agreementEndDate: string;
+  emergencyContact?: string;
+  documents?: string[];
+}
+
 interface MemberDetails {
   id: string;
   name: string;
@@ -290,7 +303,6 @@ interface Event {
   location: string;
 }
 
-// Define proper types for the member data structure
 interface Member {
   name: string;
   phone: string | number;
@@ -302,9 +314,9 @@ interface Member {
   agreementEndDate?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  isPropertyRented?: boolean;
 }
 
-// Define EditProfileData interface
 interface EditProfileData {
   name: string;
   phone: number;
@@ -315,6 +327,8 @@ interface EditProfileData {
   propertyStatus?: "owned" | "rented";
   agreementStartDate?: string;
   agreementEndDate?: string;
+  isPropertyRented?: boolean;
+  tenants?: Tenant[];
 }
 
 type ComplaintType =
@@ -668,6 +682,8 @@ export default function MemberDashboard() {
     unitNumber: "",
     familyMembers: [],
     vehicles: [],
+    isPropertyRented: false,
+    tenants: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1201,7 +1217,7 @@ export default function MemberDashboard() {
           return {
             id: doc.id,
             ...data,
-            age: Number(data.age) || 0, 
+            age: Number(data.age) || 0,
           };
         });
 
@@ -1212,6 +1228,15 @@ export default function MemberDashboard() {
         const vehiclesData: Vehicle[] = vehiclesSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...(doc.data() as Omit<Vehicle, "id">),
+        }));
+
+        // Fetch tenants
+        const tenantsSnapshot = await getDocs(
+          collection(db, "members", userId, "tenants")
+        );
+        const tenantsData: Tenant[] = tenantsSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<Tenant, "id">),
         }));
 
         // Update state
@@ -1226,8 +1251,10 @@ export default function MemberDashboard() {
           propertyStatus: data.propertyStatus || "owned",
           agreementStartDate: data.agreementStartDate || "",
           agreementEndDate: data.agreementEndDate || "",
+          isPropertyRented: data.isPropertyRented || false,
           familyMembers: familyData,
           vehicles: vehiclesData,
+          tenants: tenantsData,
         });
 
         setFamilyMembers(familyData);
@@ -1559,7 +1586,7 @@ export default function MemberDashboard() {
     }
   };
 
-const formatDateTime = (value: Timestamp | Date | undefined): string => {
+  const formatDateTime = (value: Timestamp | Date | undefined): string => {
     if (!value) return "N/A";
 
     const date = value instanceof Timestamp ? value.toDate() : value;
@@ -1899,6 +1926,7 @@ const formatDateTime = (value: Timestamp | Date | undefined): string => {
           unitNumber: editProfileData.unitNumber,
           alternateAddress: editProfileData.alternateAddress || "",
           propertyStatus: editProfileData.propertyStatus || "owned",
+          isPropertyRented: editProfileData.isPropertyRented || false,
           agreementStartDate:
             editProfileData.propertyStatus === "rented"
               ? editProfileData.agreementStartDate
@@ -1968,12 +1996,37 @@ const formatDateTime = (value: Timestamp | Date | undefined): string => {
         });
         await Promise.all(addVehiclePromises);
 
+        // Update tenants subcollection
+        const tenantsRef = collection(db, "members", user.uid, "tenants");
+        const existingTenants = await getDocs(tenantsRef);
+        const deleteTenantPromises = existingTenants.docs.map((doc) =>
+          deleteDoc(doc.ref)
+        );
+        await Promise.all(deleteTenantPromises);
+
+        const addTenantPromises = (editProfileData.tenants || []).map(
+          (tenant) =>
+            addDoc(tenantsRef, {
+              name: tenant.name,
+              phone: tenant.phone,
+              email: tenant.email,
+              aadhaarNumber: tenant.aadhaarNumber || "",
+              panNumber: tenant.panNumber || "",
+              agreementStartDate: tenant.agreementStartDate,
+              agreementEndDate: tenant.agreementEndDate,
+              emergencyContact: tenant.emergencyContact || "",
+              documents: tenant.documents || [],
+            })
+        );
+        await Promise.all(addTenantPromises);
+
         // Update local state
         setUserData({
           ...userData,
           name: editProfileData.name,
           phone: editProfileData.phone,
           unitNumber: editProfileData.unitNumber,
+          isPropertyRented: editProfileData.isPropertyRented,
         } as Member);
 
         // Refresh vehicles list
@@ -2395,7 +2448,7 @@ const formatDateTime = (value: Timestamp | Date | undefined): string => {
     }
   };
 
-const renderSafeDate = (value?: Timestamp | string): string => {
+  const renderSafeDate = (value?: Timestamp | string): string => {
     if (!value) return "Not available";
 
     const date = value instanceof Timestamp ? value.toDate() : new Date(value);
@@ -2446,6 +2499,7 @@ const renderSafeDate = (value?: Timestamp | string): string => {
         unitNumber: editProfileData.unitNumber,
         alternateAddress: editProfileData.alternateAddress || "",
         propertyStatus: editProfileData.propertyStatus || "owned",
+        isPropertyRented: editProfileData.isPropertyRented || false,
         agreementStartDate:
           editProfileData.propertyStatus === "rented"
             ? editProfileData.agreementStartDate
@@ -2515,13 +2569,39 @@ const renderSafeDate = (value?: Timestamp | string): string => {
       });
       await Promise.all(addVehiclePromises);
 
+      // Update tenants subcollection
+      const tenantsRef = collection(db, "members", user.uid, "tenants");
+      const existingTenants = await getDocs(tenantsRef);
+      const deleteTenantPromises = existingTenants.docs.map((doc) =>
+        deleteDoc(doc.ref)
+      );
+      await Promise.all(deleteTenantPromises);
+
+      const addTenantPromises = (editProfileData.tenants || []).map((tenant) =>
+        addDoc(tenantsRef, {
+          name: tenant.name,
+          phone: tenant.phone,
+          email: tenant.email,
+          aadhaarNumber: tenant.aadhaarNumber || "",
+          panNumber: tenant.panNumber || "",
+          agreementStartDate: tenant.agreementStartDate,
+          agreementEndDate: tenant.agreementEndDate,
+          emergencyContact: tenant.emergencyContact || "",
+          documents: tenant.documents || [],
+        })
+      );
+      await Promise.all(addTenantPromises);
+
+      // Update local state
       setUserData({
         ...userData,
         name: editProfileData.name,
         phone: editProfileData.phone,
         unitNumber: editProfileData.unitNumber,
-      });
+        isPropertyRented: editProfileData.isPropertyRented,
+      } as Member);
 
+      // Refresh vehicles list
       const vehiclesSnapshot = await getDocs(vehiclesRef);
       const vehiclesData: Vehicle[] = vehiclesSnapshot.docs.map((doc) => {
         const data = doc.data() as Omit<Vehicle, "id">;
@@ -2532,7 +2612,6 @@ const renderSafeDate = (value?: Timestamp | string): string => {
       });
 
       setVehicles(vehiclesData);
-
       setShowEditProfileModal(false);
       alert("Profile updated successfully!");
     } catch (error) {
@@ -4808,7 +4887,10 @@ const renderSafeDate = (value?: Timestamp | string): string => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            End: {vehicle.endDate ? renderSafeDate(vehicle.endDate) : "-"}
+                            End:{" "}
+                            {vehicle.endDate
+                              ? renderSafeDate(vehicle.endDate)
+                              : "-"}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span
@@ -5718,6 +5800,28 @@ const renderSafeDate = (value?: Timestamp | string): string => {
                 </header>
               </div>
 
+              <div className="my-6">
+                {userData.isPropertyRented && (
+                  <>
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">
+                      Tenant Information
+                    </h3>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-blue-800 text-lg">
+                        This property is currently rented. Tenant details can be
+                        viewed and managed in the edit profile section.
+                      </p>
+                      <button
+                        onClick={() => setShowEditProfileModal(true)}
+                        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-sm"
+                      >
+                        View Tenant Details
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                 <div>
                   <h3 className="text-xl font-bold text-gray-800 mb-4">
@@ -5874,6 +5978,1063 @@ const renderSafeDate = (value?: Timestamp | string): string => {
             </div>
           )}
         </div>
+
+        {/* Edit Profile Modal */}
+        {showEditProfileModal && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold text-gray-800">
+                  Edit Profile
+                </h2>
+                <button
+                  onClick={() => setShowEditProfileModal(false)}
+                  className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateProfile}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                      htmlFor="name"
+                    >
+                      Full Name
+                    </label>
+                    <input
+                      id="name"
+                      type="text"
+                      value={editProfileData.name}
+                      onChange={(e) =>
+                        setEditProfileData({
+                          ...editProfileData,
+                          name: e.target.value,
+                        })
+                      }
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                      htmlFor="phone"
+                    >
+                      Phone Number
+                    </label>
+                    <input
+                      id="phone"
+                      type="tel"
+                      value={editProfileData.phone}
+                      onChange={(e) =>
+                        setEditProfileData({
+                          ...editProfileData,
+                          phone: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                      htmlFor="unitNumber"
+                    >
+                      Unit Number
+                    </label>
+                    <input
+                      id="unitNumber"
+                      type="text"
+                      value={editProfileData.unitNumber}
+                      onChange={(e) =>
+                        setEditProfileData({
+                          ...editProfileData,
+                          unitNumber: e.target.value,
+                        })
+                      }
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                      required
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                      htmlFor="alternateAddress"
+                    >
+                      Alternate Address
+                    </label>
+                    <input
+                      id="alternateAddress"
+                      type="text"
+                      value={editProfileData.alternateAddress || ""}
+                      onChange={(e) =>
+                        setEditProfileData({
+                          ...editProfileData,
+                          alternateAddress: e.target.value,
+                        })
+                      }
+                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                      placeholder="Optional alternate address"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      Property Status
+                    </label>
+                    <div className="flex space-x-4">
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          name="propertyStatus"
+                          value="owned"
+                          checked={editProfileData.propertyStatus === "owned"}
+                          onChange={(e) =>
+                            setEditProfileData({
+                              ...editProfileData,
+                              propertyStatus: e.target.value as
+                                | "owned"
+                                | "rented",
+                            })
+                          }
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="ml-2 text-black">Owned</span>
+                      </label>
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          name="propertyStatus"
+                          value="rented"
+                          checked={editProfileData.propertyStatus === "rented"}
+                          onChange={(e) =>
+                            setEditProfileData({
+                              ...editProfileData,
+                              propertyStatus: e.target.value as
+                                | "owned"
+                                | "rented",
+                            })
+                          }
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="ml-2 text-black">Rented</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {editProfileData.propertyStatus === "rented" && (
+                    <>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          Agreement Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={editProfileData.agreementStartDate || ""}
+                          onChange={(e) =>
+                            setEditProfileData({
+                              ...editProfileData,
+                              agreementStartDate: e.target.value,
+                            })
+                          }
+                          className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          Agreement End Date
+                        </label>
+                        <input
+                          type="date"
+                          value={editProfileData.agreementEndDate || ""}
+                          onChange={(e) =>
+                            setEditProfileData({
+                              ...editProfileData,
+                              agreementEndDate: e.target.value,
+                            })
+                          }
+                          className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Rental Property Information Section */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-800">
+                        Rental Property Information
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {editProfileData.isPropertyRented
+                          ? "This property is currently rented to tenants"
+                          : "Mark if this property is rented out to tenants"}
+                      </p>
+                    </div>
+                    <div className="flex items-center">
+                      <span
+                        className={`mr-3 text-sm font-medium ${
+                          editProfileData.isPropertyRented
+                            ? "text-green-600"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        {editProfileData.isPropertyRented
+                          ? "Rented"
+                          : "Not Rented"}
+                      </span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editProfileData.isPropertyRented || false}
+                          onChange={(e) =>
+                            setEditProfileData({
+                              ...editProfileData,
+                              isPropertyRented: e.target.checked,
+                            })
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {editProfileData.isPropertyRented && (
+                    <>
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-md font-medium text-gray-800">
+                          Tenant Details
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditProfileData({
+                              ...editProfileData,
+                              tenants: [
+                                ...(editProfileData.tenants || []),
+                                {
+                                  name: "",
+                                  phone: "",
+                                  email: "",
+                                  agreementStartDate: "",
+                                  agreementEndDate: "",
+                                },
+                              ],
+                            });
+                          }}
+                          className="px-3 py-1 bg-blue-100 text-blue-600 text-sm rounded-lg hover:bg-blue-200 cursor-pointer"
+                        >
+                          Add Tenant
+                        </button>
+                      </div>
+
+                      <div className="space-y-4">
+                        {(editProfileData.tenants || []).map(
+                          (tenant, index) => (
+                            <div
+                              key={index}
+                              className="border border-gray-200 rounded-lg p-4"
+                            >
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    Tenant Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={tenant.name}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].name =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    placeholder="Full Name"
+                                    required
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    Phone Number
+                                  </label>
+                                  <input
+                                    type="tel"
+                                    value={tenant.phone}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].phone =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    placeholder="Phone Number"
+                                    required
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    Email Address
+                                  </label>
+                                  <input
+                                    type="email"
+                                    value={tenant.email}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].email =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    placeholder="Email Address"
+                                    required
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    Emergency Contact
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={tenant.emergencyContact || ""}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].emergencyContact =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    placeholder="Emergency Contact"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    Aadhaar Number
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={tenant.aadhaarNumber || ""}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].aadhaarNumber =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    placeholder="Aadhaar Number"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    PAN Number
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={tenant.panNumber || ""}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].panNumber =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    placeholder="PAN Number"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    Agreement Start Date
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={tenant.agreementStartDate}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].agreementStartDate =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    required
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                                    Agreement End Date
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={tenant.agreementEndDate}
+                                    onChange={(e) => {
+                                      const updatedTenants = [
+                                        ...(editProfileData.tenants || []),
+                                      ];
+                                      updatedTenants[index].agreementEndDate =
+                                        e.target.value;
+                                      setEditProfileData({
+                                        ...editProfileData,
+                                        tenants: updatedTenants,
+                                      });
+                                    }}
+                                    className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                    required
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-medium mb-2">
+                                  Upload Tenant Documents (ID Proof, Agreement,
+                                  etc.)
+                                </label>
+                                <input
+                                  type="file"
+                                  multiple
+                                  onChange={(e) => {
+                                    if (e.target.files) {
+                                      console.log(
+                                        `Files selected for tenant ${index}:`,
+                                        Array.from(e.target.files).map(
+                                          (f) => f.name
+                                        )
+                                      );
+                                      alert(
+                                        "File upload functionality would be implemented here"
+                                      );
+                                    }
+                                  }}
+                                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedTenants = [
+                                    ...(editProfileData.tenants || []),
+                                  ];
+                                  updatedTenants.splice(index, 1);
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    tenants: updatedTenants,
+                                  });
+                                }}
+                                className="text-red-600 text-sm hover:text-red-800 cursor-pointer"
+                              >
+                                Remove Tenant
+                              </button>
+                            </div>
+                          )
+                        )}
+
+                        {(!editProfileData.tenants ||
+                          editProfileData.tenants.length === 0) && (
+                          <p className="text-gray-500 text-center py-4">
+                            No tenants added. Add tenant details if the property
+                            is rented.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end mt-4">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditProfileData({
+                              ...editProfileData,
+                              isPropertyRented: false,
+                              tenants: [],
+                            });
+                          }}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors cursor-pointer"
+                        >
+                          Cancel Rental
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Family Members Section */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium text-gray-800">
+                      Family Members
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditProfileData({
+                          ...editProfileData,
+                          familyMembers: [
+                            ...editProfileData.familyMembers,
+                            { name: "", relation: "", age: 0 },
+                          ],
+                        });
+                      }}
+                      className="px-3 py-1 bg-blue-100 text-blue-600 text-sm rounded-lg hover:bg-blue-200 cursor-pointer"
+                    >
+                      Add Member
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {editProfileData.familyMembers?.map((member, index) => (
+                      <div
+                        key={index}
+                        className="border border-gray-200 rounded-lg p-4"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-gray-700 text-sm font-medium mb-2">
+                              Name
+                            </label>
+                            <input
+                              type="text"
+                              value={member.name}
+                              onChange={(e) => {
+                                const updatedMembers = [
+                                  ...editProfileData.familyMembers,
+                                ];
+                                updatedMembers[index].name = e.target.value;
+                                setEditProfileData({
+                                  ...editProfileData,
+                                  familyMembers: updatedMembers,
+                                });
+                              }}
+                              className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                              placeholder="Full Name"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-gray-700 text-sm font-medium mb-2">
+                              Relation
+                            </label>
+                            <div className="space-y-2">
+                              <select
+                                value={
+                                  [
+                                    "Father",
+                                    "Mother",
+                                    "Spouse",
+                                    "Son",
+                                    "Daughter",
+                                    "Brother",
+                                    "Sister",
+                                  ].includes(member.relation)
+                                    ? member.relation
+                                    : "Other"
+                                }
+                                onChange={(e) => {
+                                  const updatedMembers = [
+                                    ...editProfileData.familyMembers,
+                                  ];
+                                  updatedMembers[index].relation =
+                                    e.target.value;
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    familyMembers: updatedMembers,
+                                  });
+                                }}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                              >
+                                <option value="">Select Relation</option>
+                                <option value="Father">Father</option>
+                                <option value="Mother">Mother</option>
+                                <option value="Spouse">Spouse</option>
+                                <option value="Son">Son</option>
+                                <option value="Daughter">Daughter</option>
+                                <option value="Brother">Brother</option>
+                                <option value="Sister">Sister</option>
+                                <option value="Other">Other</option>
+                              </select>
+
+                              {member.relation === "Other" && (
+                                <input
+                                  type="text"
+                                  value={member.relation || ""}
+                                  onChange={(e) => {
+                                    const updatedMembers = [
+                                      ...editProfileData.familyMembers,
+                                    ];
+                                    updatedMembers[index].relation =
+                                      e.target.value;
+                                    updatedMembers[index].relation = "Other";
+                                    setEditProfileData({
+                                      ...editProfileData,
+                                      familyMembers: updatedMembers,
+                                    });
+                                  }}
+                                  placeholder="Enter custom relation"
+                                  className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-gray-700 text-sm font-medium mb-2">
+                              Age
+                            </label>
+                            <input
+                              type="number"
+                              value={member.age}
+                              onChange={(e) => {
+                                const newAge = Number(e.target.value);
+                                const updatedMembers = [
+                                  ...editProfileData.familyMembers,
+                                ];
+                                updatedMembers[index].age = newAge;
+                                setEditProfileData({
+                                  ...editProfileData,
+                                  familyMembers: updatedMembers,
+                                });
+                              }}
+                              className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                              placeholder="Age"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedMembers = [
+                              ...editProfileData.familyMembers,
+                            ];
+                            updatedMembers.splice(index, 1);
+                            setEditProfileData({
+                              ...editProfileData,
+                              familyMembers: updatedMembers,
+                            });
+                          }}
+                          className="mt-3 text-red-600 text-sm hover:text-red-800 cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+
+                    {(!editProfileData.familyMembers ||
+                      editProfileData.familyMembers.length === 0) && (
+                      <p className="text-gray-500 text-center py-4">
+                        No family members added.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Vehicles Section */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium text-gray-800">
+                      Vehicles
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditProfileData({
+                          ...editProfileData,
+                          vehicles: [
+                            ...editProfileData.vehicles,
+                            {
+                              type: "",
+                              numberPlate: "",
+                              model: "",
+                              parking: false,
+                              isCurrent: true,
+                              startDate: new Date().toISOString().split("T")[0],
+                              endDate: "",
+                            },
+                          ],
+                        });
+                      }}
+                      className="px-3 py-1 bg-blue-100 text-blue-600 text-sm rounded-lg hover:bg-blue-200 cursor-pointer"
+                    >
+                      Add Vehicle
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {editProfileData.vehicles?.map((vehicle, index) => {
+                      const startDateValue =
+                        typeof vehicle.startDate === "object" &&
+                        "toDate" in vehicle.startDate
+                          ? vehicle.startDate
+                              .toDate()
+                              .toISOString()
+                              .split("T")[0]
+                          : vehicle.startDate || "";
+
+                      const endDateValue =
+                        vehicle.endDate &&
+                        typeof vehicle.endDate === "object" &&
+                        "toDate" in vehicle.endDate
+                          ? vehicle.endDate.toDate().toISOString().split("T")[0]
+                          : vehicle.endDate || "";
+
+                      return (
+                        <div
+                          key={index}
+                          className="border border-gray-200 rounded-lg p-4"
+                        >
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            {/* Vehicle Type */}
+                            <div>
+                              <label className="block text-gray-700 text-sm font-medium mb-2">
+                                Vehicle Type
+                              </label>
+                              <select
+                                value={vehicle.type}
+                                onChange={(e) => {
+                                  const updatedVehicles = [
+                                    ...editProfileData.vehicles,
+                                  ];
+                                  updatedVehicles[index].type = e.target.value;
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    vehicles: updatedVehicles,
+                                  });
+                                }}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                              >
+                                <option value="">Select Type</option>
+                                <option value="Car">Car</option>
+                                <option value="Motorcycle">Motorcycle</option>
+                                <option value="Scooter">Scooter</option>
+                                <option value="Bicycle">Bicycle</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+
+                            {/* Number Plate */}
+                            <div>
+                              <label className="block text-gray-700 text-sm font-medium mb-2">
+                                Number Plate
+                              </label>
+                              <input
+                                type="text"
+                                value={vehicle.numberPlate}
+                                onChange={(e) => {
+                                  const updatedVehicles = [
+                                    ...editProfileData.vehicles,
+                                  ];
+                                  updatedVehicles[index].numberPlate =
+                                    e.target.value;
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    vehicles: updatedVehicles,
+                                  });
+                                }}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                placeholder="Number Plate"
+                              />
+                            </div>
+
+                            {/* Model */}
+                            <div>
+                              <label className="block text-gray-700 text-sm font-medium mb-2">
+                                Model
+                              </label>
+                              <input
+                                type="text"
+                                value={vehicle.model}
+                                onChange={(e) => {
+                                  const updatedVehicles = [
+                                    ...editProfileData.vehicles,
+                                  ];
+                                  updatedVehicles[index].model = e.target.value;
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    vehicles: updatedVehicles,
+                                  });
+                                }}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                placeholder="Model"
+                              />
+                            </div>
+
+                            {/* Parking Status */}
+                            <div>
+                              <label className="block text-gray-700 text-sm font-medium mb-2">
+                                Parking Assigned
+                              </label>
+                              <select
+                                value={vehicle.parking ? "yes" : "no"}
+                                onChange={(e) => {
+                                  const updatedVehicles = [
+                                    ...editProfileData.vehicles,
+                                  ];
+                                  updatedVehicles[index].parking =
+                                    e.target.value === "yes";
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    vehicles: updatedVehicles,
+                                  });
+                                }}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                              >
+                                <option value="no">No</option>
+                                <option value="yes">Yes</option>
+                              </select>
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <label className="block text-gray-700 text-sm font-medium mb-2">
+                                RC Book Number
+                              </label>
+                              <input
+                                type="text"
+                                value={vehicle.rcBookNumber || ""}
+                                onChange={(e) => {
+                                  const updatedVehicles = [
+                                    ...editProfileData.vehicles,
+                                  ];
+                                  updatedVehicles[index].rcBookNumber =
+                                    e.target.value;
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    vehicles: updatedVehicles,
+                                  });
+                                }}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                placeholder="RC Book Number"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">
+                              Upload New RC Book (Optional)
+                            </label>
+                            <input
+                              type="file"
+                              multiple
+                              onChange={(e) => {
+                                if (e.target.files) {
+                                  console.log(
+                                    `Files selected for vehicle ${index}:`,
+                                    Array.from(e.target.files).map(
+                                      (f) => f.name
+                                    )
+                                  );
+                                  alert(
+                                    "File input is for demonstration. Files are not saved on profile update."
+                                  );
+                                }
+                              }}
+                              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                            />
+                          </div>
+
+                          {/* Vehicle Status (Current/Past) */}
+                          <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-medium mb-2">
+                              Vehicle Status
+                            </label>
+                            <div className="flex space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  name={`vehicle-status-${index}`}
+                                  value="current"
+                                  checked={vehicle.isCurrent}
+                                  onChange={() => {
+                                    const updatedVehicles = [
+                                      ...editProfileData.vehicles,
+                                    ];
+                                    updatedVehicles[index].isCurrent = true;
+                                    setEditProfileData({
+                                      ...editProfileData,
+                                      vehicles: updatedVehicles,
+                                    });
+                                  }}
+                                  className="text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="ml-2 text-black">
+                                  Current Vehicle
+                                </span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  name={`vehicle-status-${index}`}
+                                  value="past"
+                                  checked={!vehicle.isCurrent}
+                                  onChange={() => {
+                                    const updatedVehicles = [
+                                      ...editProfileData.vehicles,
+                                    ];
+                                    updatedVehicles[index].isCurrent = false;
+                                    setEditProfileData({
+                                      ...editProfileData,
+                                      vehicles: updatedVehicles,
+                                    });
+                                  }}
+                                  className="text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="ml-2 text-black">
+                                  Past Vehicle
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+
+                          {/* Date Inputs */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Start Date */}
+                            <div>
+                              <label className="block text-gray-700 text-sm font-medium mb-2">
+                                Start Date
+                              </label>
+                              <input
+                                type="date"
+                                value={startDateValue}
+                                onChange={(e) => {
+                                  const updatedVehicles = [
+                                    ...editProfileData.vehicles,
+                                  ];
+                                  updatedVehicles[index].startDate =
+                                    e.target.value;
+                                  setEditProfileData({
+                                    ...editProfileData,
+                                    vehicles: updatedVehicles,
+                                  });
+                                }}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                required
+                              />
+                            </div>
+
+                            {/* End Date (only for past vehicles) */}
+                            {!vehicle.isCurrent && (
+                              <div>
+                                <label className="block text-gray-700 text-sm font-medium mb-2">
+                                  End Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={endDateValue}
+                                  onChange={(e) => {
+                                    const updatedVehicles = [
+                                      ...editProfileData.vehicles,
+                                    ];
+                                    updatedVehicles[index].endDate =
+                                      e.target.value;
+                                    setEditProfileData({
+                                      ...editProfileData,
+                                      vehicles: updatedVehicles,
+                                    });
+                                  }}
+                                  className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                  required={!vehicle.isCurrent}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Remove Vehicle */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedVehicles = [
+                                ...editProfileData.vehicles,
+                              ];
+                              updatedVehicles.splice(index, 1);
+                              setEditProfileData({
+                                ...editProfileData,
+                                vehicles: updatedVehicles,
+                              });
+                            }}
+                            className="mt-3 text-red-600 text-sm hover:text-red-800 cursor-pointer"
+                          >
+                            Remove Vehicle
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {(!editProfileData.vehicles ||
+                      editProfileData.vehicles.length === 0) && (
+                      <p className="text-gray-500 text-center py-4">
+                        No vehicles added.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditProfileModal(false)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-5 py-2.5 text-center transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-center transition-colors cursor-pointer"
+                  >
+                    Update Profile
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <footer className="relative py-16 px-6 mt-auto shadow-top">
@@ -6316,718 +7477,6 @@ const renderSafeDate = (value?: Timestamp | string): string => {
                   title="YeshKrupa Society Location"
                 ></iframe>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Profile Modal */}
-        {showEditProfileModal && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm z-50">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-gray-800">
-                  Edit Profile
-                </h2>
-                <button
-                  onClick={() => setShowEditProfileModal(false)}
-                  className="text-gray-400 hover:text-gray-600 cursor-pointer"
-                >
-                  <CloseIcon />
-                </button>
-              </div>
-
-              <form onSubmit={handleUpdateProfile}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label
-                      className="block text-gray-700 text-sm font-medium mb-2"
-                      htmlFor="name"
-                    >
-                      Full Name
-                    </label>
-                    <input
-                      id="name"
-                      type="text"
-                      value={editProfileData.name}
-                      onChange={(e) =>
-                        setEditProfileData({
-                          ...editProfileData,
-                          name: e.target.value,
-                        })
-                      }
-                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block text-gray-700 text-sm font-medium mb-2"
-                      htmlFor="phone"
-                    >
-                      Phone Number
-                    </label>
-                    <input
-                      id="phone"
-                      type="tel"
-                      value={editProfileData.phone}
-                      onChange={(e) =>
-                        setEditProfileData({
-                          ...editProfileData,
-                          phone: Number(e.target.value) || 0,
-                        })
-                      }
-                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block text-gray-700 text-sm font-medium mb-2"
-                      htmlFor="unitNumber"
-                    >
-                      Unit Number
-                    </label>
-                    <input
-                      id="unitNumber"
-                      type="text"
-                      value={editProfileData.unitNumber}
-                      onChange={(e) =>
-                        setEditProfileData({
-                          ...editProfileData,
-                          unitNumber: e.target.value,
-                        })
-                      }
-                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                      required
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label
-                      className="block text-gray-700 text-sm font-medium mb-2"
-                      htmlFor="alternateAddress"
-                    >
-                      Alternate Address
-                    </label>
-                    <input
-                      id="alternateAddress"
-                      type="text"
-                      value={editProfileData.alternateAddress || ""}
-                      onChange={(e) =>
-                        setEditProfileData({
-                          ...editProfileData,
-                          alternateAddress: e.target.value,
-                        })
-                      }
-                      className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                      placeholder="Optional alternate address"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
-                      Property Status
-                    </label>
-                    <div className="flex space-x-4">
-                      <label className="inline-flex items-center">
-                        <input
-                          type="radio"
-                          name="propertyStatus"
-                          value="owned"
-                          checked={editProfileData.propertyStatus === "owned"}
-                          onChange={(e) =>
-                            setEditProfileData({
-                              ...editProfileData,
-                              propertyStatus: e.target.value as
-                                | "owned"
-                                | "rented",
-                            })
-                          }
-                          className="text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="ml-2 text-black">Owned</span>
-                      </label>
-                      <label className="inline-flex items-center">
-                        <input
-                          type="radio"
-                          name="propertyStatus"
-                          value="rented"
-                          checked={editProfileData.propertyStatus === "rented"}
-                          onChange={(e) =>
-                            setEditProfileData({
-                              ...editProfileData,
-                              propertyStatus: e.target.value as
-                                | "owned"
-                                | "rented",
-                            })
-                          }
-                          className="text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="ml-2 text-black">Rented</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {editProfileData.propertyStatus === "rented" && (
-                    <>
-                      <div>
-                        <label className="block text-gray-700 text-sm font-medium mb-2">
-                          Agreement Start Date
-                        </label>
-                        <input
-                          type="date"
-                          value={editProfileData.agreementStartDate || ""}
-                          onChange={(e) =>
-                            setEditProfileData({
-                              ...editProfileData,
-                              agreementStartDate: e.target.value,
-                            })
-                          }
-                          className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-gray-700 text-sm font-medium mb-2">
-                          Agreement End Date
-                        </label>
-                        <input
-                          type="date"
-                          value={editProfileData.agreementEndDate || ""}
-                          onChange={(e) =>
-                            setEditProfileData({
-                              ...editProfileData,
-                              agreementEndDate: e.target.value,
-                            })
-                          }
-                          className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Family Members Section */}
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium text-gray-800">
-                      Family Members
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditProfileData({
-                          ...editProfileData,
-                          familyMembers: [
-                            ...editProfileData.familyMembers,
-                            { name: "", relation: "", age: 0 },
-                          ],
-                        });
-                      }}
-                      className="px-3 py-1 bg-blue-100 text-blue-600 text-sm rounded-lg hover:bg-blue-200 cursor-pointer"
-                    >
-                      Add Member
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {editProfileData.familyMembers?.map((member, index) => (
-                      <div
-                        key={index}
-                        className="border border-gray-200 rounded-lg p-4"
-                      >
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <label className="block text-gray-700 text-sm font-medium mb-2">
-                              Name
-                            </label>
-                            <input
-                              type="text"
-                              value={member.name}
-                              onChange={(e) => {
-                                const updatedMembers = [
-                                  ...editProfileData.familyMembers,
-                                ];
-                                updatedMembers[index].name = e.target.value;
-                                setEditProfileData({
-                                  ...editProfileData,
-                                  familyMembers: updatedMembers,
-                                });
-                              }}
-                              className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                              placeholder="Full Name"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-gray-700 text-sm font-medium mb-2">
-                              Relation
-                            </label>
-                            <div className="space-y-2">
-                              <select
-                                value={
-                                  [
-                                    "Father",
-                                    "Mother",
-                                    "Spouse",
-                                    "Son",
-                                    "Daughter",
-                                    "Brother",
-                                    "Sister",
-                                  ].includes(member.relation)
-                                    ? member.relation
-                                    : "Other"
-                                }
-                                onChange={(e) => {
-                                  const updatedMembers = [
-                                    ...editProfileData.familyMembers,
-                                  ];
-                                  updatedMembers[index].relation =
-                                    e.target.value;
-                                  setEditProfileData({
-                                    ...editProfileData,
-                                    familyMembers: updatedMembers,
-                                  });
-                                }}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                              >
-                                <option value="">Select Relation</option>
-                                <option value="Father">Father</option>
-                                <option value="Mother">Mother</option>
-                                <option value="Spouse">Spouse</option>
-                                <option value="Son">Son</option>
-                                <option value="Daughter">Daughter</option>
-                                <option value="Brother">Brother</option>
-                                <option value="Sister">Sister</option>
-                                <option value="Other">Other</option>
-                              </select>
-
-                              {member.relation === "Other" && (
-                                <input
-                                  type="text"
-                                  value={member.relation || ""}
-                                  onChange={(e) => {
-                                    const updatedMembers = [
-                                      ...editProfileData.familyMembers,
-                                    ];
-                                    updatedMembers[index].relation =
-                                      e.target.value;
-                                    updatedMembers[index].relation = "Other";
-                                    setEditProfileData({
-                                      ...editProfileData,
-                                      familyMembers: updatedMembers,
-                                    });
-                                  }}
-                                  placeholder="Enter custom relation"
-                                  className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                />
-                              )}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-gray-700 text-sm font-medium mb-2">
-                              Age
-                            </label>
-                            <input
-                              type="number"
-                              value={member.age}
-                              onChange={(e) => {
-                                const newAge = Number(e.target.value);
-                                const updatedMembers = [...editProfileData.familyMembers];
-                                updatedMembers[index].age = newAge;
-                                setEditProfileData({ ...editProfileData, familyMembers: updatedMembers });
-                              }}
-                              className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                              placeholder="Age"
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updatedMembers = [
-                              ...editProfileData.familyMembers,
-                            ];
-                            updatedMembers.splice(index, 1);
-                            setEditProfileData({
-                              ...editProfileData,
-                              familyMembers: updatedMembers,
-                            });
-                          }}
-                          className="mt-3 text-red-600 text-sm hover:text-red-800 cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-
-                    {(!editProfileData.familyMembers ||
-                      editProfileData.familyMembers.length === 0) && (
-                      <p className="text-gray-500 text-center py-4">
-                        No family members added.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Vehicles Section */}
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium text-gray-800">
-                      Vehicles
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditProfileData({
-                          ...editProfileData,
-                          vehicles: [
-                            ...editProfileData.vehicles,
-                            {
-                              type: "",
-                              numberPlate: "",
-                              model: "",
-                              parking: false,
-                              isCurrent: true,
-                              startDate: new Date().toISOString().split("T")[0],
-                              endDate: "",
-                            },
-                          ],
-                        });
-                      }}
-                      className="px-3 py-1 bg-blue-100 text-blue-600 text-sm rounded-lg hover:bg-blue-200 cursor-pointer"
-                    >
-                      Add Vehicle
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {editProfileData.vehicles?.map((vehicle, index) => {
-                      const startDateValue =
-                        typeof vehicle.startDate === "object" &&
-                        "toDate" in vehicle.startDate
-                          ? vehicle.startDate
-                              .toDate()
-                              .toISOString()
-                              .split("T")[0]
-                          : vehicle.startDate || "";
-
-                      const endDateValue =
-                        vehicle.endDate &&
-                        typeof vehicle.endDate === "object" &&
-                        "toDate" in vehicle.endDate
-                          ? vehicle.endDate.toDate().toISOString().split("T")[0]
-                          : vehicle.endDate || "";
-
-                      return (
-                        <div
-                          key={index}
-                          className="border border-gray-200 rounded-lg p-4"
-                        >
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            {/* Vehicle Type */}
-                            <div>
-                              <label className="block text-gray-700 text-sm font-medium mb-2">
-                                Vehicle Type
-                              </label>
-                              <select
-                                value={vehicle.type}
-                                onChange={(e) => {
-                                  const updatedVehicles = [
-                                    ...editProfileData.vehicles,
-                                  ];
-                                  updatedVehicles[index].type = e.target.value;
-                                  setEditProfileData({
-                                    ...editProfileData,
-                                    vehicles: updatedVehicles,
-                                  });
-                                }}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                              >
-                                <option value="">Select Type</option>
-                                <option value="Car">Car</option>
-                                <option value="Motorcycle">Motorcycle</option>
-                                <option value="Scooter">Scooter</option>
-                                <option value="Bicycle">Bicycle</option>
-                                <option value="Other">Other</option>
-                              </select>
-                            </div>
-
-                            {/* Number Plate */}
-                            <div>
-                              <label className="block text-gray-700 text-sm font-medium mb-2">
-                                Number Plate
-                              </label>
-                              <input
-                                type="text"
-                                value={vehicle.numberPlate}
-                                onChange={(e) => {
-                                  const updatedVehicles = [
-                                    ...editProfileData.vehicles,
-                                  ];
-                                  updatedVehicles[index].numberPlate =
-                                    e.target.value;
-                                  setEditProfileData({
-                                    ...editProfileData,
-                                    vehicles: updatedVehicles,
-                                  });
-                                }}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                placeholder="Number Plate"
-                              />
-                            </div>
-
-                            {/* Model */}
-                            <div>
-                              <label className="block text-gray-700 text-sm font-medium mb-2">
-                                Model
-                              </label>
-                              <input
-                                type="text"
-                                value={vehicle.model}
-                                onChange={(e) => {
-                                  const updatedVehicles = [
-                                    ...editProfileData.vehicles,
-                                  ];
-                                  updatedVehicles[index].model = e.target.value;
-                                  setEditProfileData({
-                                    ...editProfileData,
-                                    vehicles: updatedVehicles,
-                                  });
-                                }}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                placeholder="Model"
-                              />
-                            </div>
-
-                            {/* Parking Status */}
-                            <div>
-                              <label className="block text-gray-700 text-sm font-medium mb-2">
-                                Parking Assigned
-                              </label>
-                              <select
-                                value={vehicle.parking ? "yes" : "no"}
-                                onChange={(e) => {
-                                  const updatedVehicles = [
-                                    ...editProfileData.vehicles,
-                                  ];
-                                  updatedVehicles[index].parking =
-                                    e.target.value === "yes";
-                                  setEditProfileData({
-                                    ...editProfileData,
-                                    vehicles: updatedVehicles,
-                                  });
-                                }}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                              >
-                                <option value="no">No</option>
-                                <option value="yes">Yes</option>
-                              </select>
-                            </div>
-
-                            <div className="md:col-span-2">
-                              <label className="block text-gray-700 text-sm font-medium mb-2">
-                                RC Book Number
-                              </label>
-                              <input
-                                type="text"
-                                value={vehicle.rcBookNumber || ""}
-                                onChange={(e) => {
-                                  const updatedVehicles = [
-                                    ...editProfileData.vehicles,
-                                  ];
-                                  updatedVehicles[index].rcBookNumber =
-                                    e.target.value;
-                                  setEditProfileData({
-                                    ...editProfileData,
-                                    vehicles: updatedVehicles,
-                                  });
-                                }}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                placeholder="RC Book Number"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-medium mb-2">
-                              Upload New RC Book (Optional)
-                            </label>
-                            <input
-                              type="file"
-                              multiple
-                              onChange={(e) => {
-                                if (e.target.files) {
-                                  console.log(
-                                    `Files selected for vehicle ${index}:`,
-                                    Array.from(e.target.files).map(
-                                      (f) => f.name
-                                    )
-                                  );
-                                  alert(
-                                    "File input is for demonstration. Files are not saved on profile update."
-                                  );
-                                }
-                              }}
-                              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                            />
-                          </div>
-
-                          {/* Vehicle Status (Current/Past) */}
-                          <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-medium mb-2">
-                              Vehicle Status
-                            </label>
-                            <div className="flex space-x-4">
-                              <label className="inline-flex items-center">
-                                <input
-                                  type="radio"
-                                  name={`vehicle-status-${index}`}
-                                  value="current"
-                                  checked={vehicle.isCurrent}
-                                  onChange={() => {
-                                    const updatedVehicles = [
-                                      ...editProfileData.vehicles,
-                                    ];
-                                    updatedVehicles[index].isCurrent = true;
-                                    setEditProfileData({
-                                      ...editProfileData,
-                                      vehicles: updatedVehicles,
-                                    });
-                                  }}
-                                  className="text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="ml-2 text-black">
-                                  Current Vehicle
-                                </span>
-                              </label>
-                              <label className="inline-flex items-center">
-                                <input
-                                  type="radio"
-                                  name={`vehicle-status-${index}`}
-                                  value="past"
-                                  checked={!vehicle.isCurrent}
-                                  onChange={() => {
-                                    const updatedVehicles = [
-                                      ...editProfileData.vehicles,
-                                    ];
-                                    updatedVehicles[index].isCurrent = false;
-                                    setEditProfileData({
-                                      ...editProfileData,
-                                      vehicles: updatedVehicles,
-                                    });
-                                  }}
-                                  className="text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="ml-2 text-black">
-                                  Past Vehicle
-                                </span>
-                              </label>
-                            </div>
-                          </div>
-
-                          {/* Date Inputs */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Start Date */}
-                            <div>
-                              <label className="block text-gray-700 text-sm font-medium mb-2">
-                                Start Date
-                              </label>
-                              <input
-                                type="date"
-                                value={startDateValue}
-                                onChange={(e) => {
-                                  const updatedVehicles = [
-                                    ...editProfileData.vehicles,
-                                  ];
-                                  updatedVehicles[index].startDate =
-                                    e.target.value;
-                                  setEditProfileData({
-                                    ...editProfileData,
-                                    vehicles: updatedVehicles,
-                                  });
-                                }}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                required
-                              />
-                            </div>
-
-                            {/* End Date (only for past vehicles) */}
-                            {!vehicle.isCurrent && (
-                              <div>
-                                <label className="block text-gray-700 text-sm font-medium mb-2">
-                                  End Date
-                                </label>
-                                <input
-                                  type="date"
-                                  value={endDateValue}
-                                  onChange={(e) => {
-                                    const updatedVehicles = [
-                                      ...editProfileData.vehicles,
-                                    ];
-                                    updatedVehicles[index].endDate =
-                                      e.target.value;
-                                    setEditProfileData({
-                                      ...editProfileData,
-                                      vehicles: updatedVehicles,
-                                    });
-                                  }}
-                                  className="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                  required={!vehicle.isCurrent}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Remove Vehicle */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updatedVehicles = [
-                                ...editProfileData.vehicles,
-                              ];
-                              updatedVehicles.splice(index, 1);
-                              setEditProfileData({
-                                ...editProfileData,
-                                vehicles: updatedVehicles,
-                              });
-                            }}
-                            className="mt-3 text-red-600 text-sm hover:text-red-800 cursor-pointer"
-                          >
-                            Remove Vehicle
-                          </button>
-                        </div>
-                      );
-                    })}
-
-                    {(!editProfileData.vehicles ||
-                      editProfileData.vehicles.length === 0) && (
-                      <p className="text-gray-500 text-center py-4">
-                        No vehicles added.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowEditProfileModal(false)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-5 py-2.5 text-center transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-center transition-colors cursor-pointer"
-                  >
-                    Update Profile
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         )}

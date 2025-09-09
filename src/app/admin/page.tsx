@@ -68,6 +68,12 @@ interface Member {
   createdAt?: Timestamp;
 }
 
+interface VehicleWithMemberInfo extends Vehicle {
+  memberId: string;
+  memberName: string;
+  memberUnit: string;
+}
+
 interface Payment {
   id: string;
   amount: number;
@@ -115,9 +121,24 @@ interface MemberDetails {
   familyMembers?: FamilyMember[];
   vehicles?: Vehicle[];
   alternateAddress?: string;
-  propertyStatus?: string;
+  propertyStatus?: "owned" | "rented";
   agreementStartDate?: string;
   agreementEndDate?: string;
+  tenants?: Tenant[];
+  isPropertyRented?: boolean;
+}
+
+interface Tenant {
+  id?: string;
+  name: string;
+  phone: string;
+  email: string;
+  aadhaarNumber?: string;
+  panNumber?: string;
+  agreementStartDate: string;
+  agreementEndDate: string;
+  emergencyContact?: string;
+  documents?: string[];
 }
 
 interface FamilyMember {
@@ -129,7 +150,7 @@ interface FamilyMember {
 }
 
 interface Vehicle {
-  id?: string;
+  id: string;
   type: string;
   model: string;
   numberPlate: string;
@@ -801,7 +822,7 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleWithMemberInfo[]>([]);
   const [serviceProviders, setServiceProviders] = useState<ServiceProvider[]>(
     []
   );
@@ -897,7 +918,9 @@ export default function AdminDashboard() {
     },
   });
 
-  const [newVehicle, setNewVehicle] = useState<Vehicle>({
+  type NewVehicle = Omit<Vehicle, "id">;
+
+  const [newVehicle, setNewVehicle] = useState<NewVehicle>({
     type: "Car",
     model: "",
     numberPlate: "",
@@ -1007,6 +1030,8 @@ export default function AdminDashboard() {
   // Other States
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [showMemberDetails, setShowMemberDetails] = useState(false);
+  const [tenantDetails, setTenantDetails] = useState<Tenant[]>([]);
+  const [showTenantDetails, setShowTenantDetails] = useState(false);
   const [showVehicleManagement, setShowVehicleManagement] = useState(false);
   const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [tempStatus, setTempStatus] = useState("");
@@ -1482,6 +1507,28 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteRequest = async (id: string) => {
+    if (
+      window.confirm(
+        "Are you sure you want to permanently delete this request?"
+      )
+    ) {
+      try {
+        const requestDocRef = doc(db, "deletionRequests", id);
+
+        await deleteDoc(requestDocRef);
+
+        setDeletionRequests((currentRequests) =>
+          currentRequests.filter((request) => request.id !== id)
+        );
+
+        console.log("Request deleted successfully!");
+      } catch (error) {
+        console.error("Error deleting request:", error);
+      }
+    }
+  };
+
   const fetchMemberDetails = async (
     memberId: string
   ): Promise<MemberDetails> => {
@@ -1511,11 +1558,42 @@ export default function AdminDashboard() {
         vehicles.push({ id: doc.id, ...doc.data() } as Vehicle);
       });
 
+      // Fetch tenants from subcollection
+      const tenantsSnapshot = await getDocs(
+        collection(db, "members", memberId, "tenants")
+      );
+      const tenants: Tenant[] = [];
+      tenantsSnapshot.forEach((doc) => {
+        tenants.push({ id: doc.id, ...doc.data() } as Tenant);
+      });
+
       return {
         ...memberData,
         id: memberId,
         familyMembers,
         vehicles,
+        tenants,
+      };
+    } catch (error) {
+      console.error("Error fetching member details:", error);
+      throw error;
+    }
+  };
+
+  const fetchTenantDetails = async (memberId: string) => {
+    try {
+      // Fetch tenants from subcollection
+      const tenantsSnapshot = await getDocs(
+        collection(db, "members", memberId, "tenants")
+      );
+      const tenants: Tenant[] = [];
+      tenantsSnapshot.forEach((doc) => {
+        tenants.push({ id: doc.id, ...doc.data() } as Tenant);
+      });
+
+      return {
+        id: memberId,
+        tenants,
       };
     } catch (error) {
       console.error("Error fetching member details:", error);
@@ -1660,7 +1738,7 @@ export default function AdminDashboard() {
   };
 
   const handleReplyToQuery = (email: string, name: string) => {
-    const subject = `Re: Your query for Yesh Krupa Society`;
+    const subject = `Re: Your query for YeshKrupa Society`;
     window.location.href = `mailto:${email}?subject=${encodeURIComponent(
       subject
     )}`;
@@ -1748,6 +1826,20 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error("Error loading member details:", error);
       alert("Failed to load member details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTenantClick = async (memberId: string) => {
+    try {
+      setLoading(true);
+      const tenantData = await fetchTenantDetails(memberId);
+      setTenantDetails(tenantData.tenants);
+      setShowTenantDetails(true);
+    } catch (error) {
+      console.error("Error loading tenant details:", error);
+      alert("Failed to load tenant details");
     } finally {
       setLoading(false);
     }
@@ -3409,24 +3501,24 @@ export default function AdminDashboard() {
     )
   ).filter((flat) => flat !== "");
 
-  const extractWingFromUnit = (unitNumber: string) => {
+  const extractWingFromUnit = (unitNumber: string): string => {
     if (!unitNumber) return "";
     return unitNumber.charAt(0);
   };
 
-  const extractFlatFromUnit = (unitNumber: string) => {
+  const extractFlatFromUnit = (unitNumber: string): string => {
     if (!unitNumber) return "";
     return unitNumber.substring(1);
   };
 
   const filteredVehicles = vehicles
-    .filter((vehicle: any) => {
+    .filter((vehicle: VehicleWithMemberInfo) => {
       if (vehicleFilter === "all") return true;
       if (vehicleFilter === "current") return vehicle.isCurrent;
       if (vehicleFilter === "past") return !vehicle.isCurrent;
       return true;
     })
-    .filter((vehicle: any) => {
+    .filter((vehicle: VehicleWithMemberInfo) => {
       const wing = extractWingFromUnit(vehicle.memberUnit);
       const flat = extractFlatFromUnit(vehicle.memberUnit);
       const matchesWing =
@@ -3437,16 +3529,22 @@ export default function AdminDashboard() {
       return matchesWing && matchesFlat;
     });
 
-  const uniqueVehicleWings = Array.from(
-    new Set(
-      vehicles.map((vehicle: any) => extractWingFromUnit(vehicle.memberUnit))
-    )
-  ).filter((wing) => wing !== "");
-  const uniqueVehicleFlats = Array.from(
-    new Set(
-      vehicles.map((vehicle: any) => extractFlatFromUnit(vehicle.memberUnit))
-    )
-  ).filter((flat) => flat !== "");
+    const uniqueVehicleWings = Array.from(
+      new Set(
+        vehicles.map((vehicle: VehicleWithMemberInfo) =>
+          extractWingFromUnit(vehicle.memberUnit)
+        )
+      )
+    ).filter((wing) => wing !== "");
+
+    const uniqueVehicleFlats = Array.from(
+      new Set(
+        vehicles.map((vehicle: VehicleWithMemberInfo) =>
+          extractFlatFromUnit(vehicle.memberUnit)
+        )
+      )
+    ).filter((flat) => flat !== "");
+
 
   const filteredForms = redevelopmentForms.filter((form) => {
     const matchesSearch =
@@ -3988,7 +4086,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-x-auto">
         <div className="flex-1 p-4 md:p-8">
           <header
             className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
@@ -4577,6 +4675,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {activeTab === "admin" && (
             <div className="bg-white shadow-sm overflow-hidden rounded-xl">
               <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -4772,6 +4871,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {/* Add Committee Member Popup */}
           {showAddCommitteePopup && (
             <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -4938,6 +5038,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {/* Add Admin Popup */}
           {showAddAdminPopup && (
             <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -5093,6 +5194,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {activeTab === "documents" && (
             <div className="bg-white shadow-sm overflow-hidden rounded-xl">
               <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -5287,6 +5389,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {showAddDocumentModal && (
             <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4 cursor-pointer">
               <div className="bg-white rounded-xl shadow-lg max-w-md w-full">
@@ -5894,6 +5997,7 @@ export default function AdminDashboard() {
                         "Reason",
                         "Status",
                         "Actions",
+                        "Delete",
                       ].map((header) => (
                         <th
                           key={header}
@@ -5968,6 +6072,28 @@ export default function AdminDashboard() {
                               Reviewed by {request.reviewedBy}
                             </span>
                           )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleDeleteRequest(request.id)}
+                            className="text-gray-400 hover:text-red-600 transition-colors duration-200 cursor-pointer"
+                            title="Delete Request"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-5 w-5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -6687,6 +6813,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {activeTab === "faqs" && (
             <div className="bg-white shadow-sm overflow-hidden">
               <div className="p-4 md:p-6 border-b border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -6764,6 +6891,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {/* Add FAQ Popup */}
           {showFAQPopup && (
             <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -6871,6 +6999,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {activeTab === "queries" && (
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
               <div className="p-4 md:p-6 border-b border-gray-200">
@@ -6958,6 +7087,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {showMemberDetails && selectedMember && (
             <div className="fixed inset-0 bg-black/70 backdrop-blur-lg flex items-center justify-center z-50 p-4">
               <div className="bg-white shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -7145,7 +7275,9 @@ export default function AdminDashboard() {
                             Agreement Start Date
                           </h4>
                           <p className="text-sm text-gray-600">
-                            {selectedMember.agreementStartDate}
+                            {formatDateToDDMMYYYY(
+                              selectedMember.agreementStartDate
+                            )}
                           </p>
                         </div>
                       )}
@@ -7155,16 +7287,342 @@ export default function AdminDashboard() {
                             Agreement End Date
                           </h4>
                           <p className="text-sm text-gray-600">
-                            {selectedMember.agreementEndDate}
+                            {formatDateToDDMMYYYY(
+                              selectedMember.agreementEndDate
+                            )}
                           </p>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Tenants Section */}
+                  <div className="mb-8">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                      <svg
+                        className="w-6 h-6 mr-2 text-blue-600"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      Property Details
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all">
+                        <h4 className="font-medium text-gray-900">Status</h4>
+                        <p className="text-sm text-gray-600">
+                          {selectedMember.isPropertyRented === true
+                            ? "Rented"
+                            : selectedMember.isPropertyRented === false
+                            ? "Owned"
+                            : "Not specified"}
+                        </p>
+                      </div>
+
+                      {selectedMember.isPropertyRented &&
+                        selectedMember.tenants &&
+                        selectedMember.tenants.length > 0 && (
+                          <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-blue-300">
+                            <div className="border-b border-slate-200 p-4 rounded-t-lg">
+                              <h3 className="text-lg font-bold text-gray-800">
+                                Tenant Information
+                              </h3>
+                            </div>
+
+                            <div className="p-5">
+                              {selectedMember.tenants.map((tenant, index) => (
+                                <div key={tenant.id || index}>
+                                  {index > 0 && (
+                                    <hr className="my-6 border-slate-200" />
+                                  )}
+
+                                  <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                                    {/* Tenant Name */}
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-500">
+                                        Name
+                                      </p>
+                                      <p className="text-base font-medium text-gray-900">
+                                        {tenant.name}
+                                      </p>
+                                    </div>
+
+                                    {/* Contact Info */}
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-500">
+                                        Contact
+                                      </p>
+                                      <p className="text-base text-gray-800">
+                                        {tenant.phone}
+                                      </p>
+                                      {tenant.email && (
+                                        <p className="text-base text-gray-800">
+                                          {tenant.email}
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    {/* Agreement Period */}
+                                    <div>
+                                      <p className="text-sm font-semibold text-gray-500">
+                                        Agreement Period
+                                      </p>
+                                      <p className="text-base text-gray-800">
+                                        {formatDateToDDMMYYYY(
+                                          tenant.agreementStartDate
+                                        )}{" "}
+                                        to{" "}
+                                        {formatDateToDDMMYYYY(
+                                          tenant.agreementEndDate
+                                        )}
+                                      </p>
+                                    </div>
+
+                                    {/* Emergency Contact (conditionally rendered) */}
+                                    {tenant.emergencyContact && (
+                                      <div>
+                                        <p className="text-sm font-semibold text-gray-500">
+                                          Emergency Contact
+                                        </p>
+                                        <p className="text-base text-gray-800">
+                                          {tenant.emergencyContact}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Identification Section (conditionally rendered) */}
+                                  {(tenant.aadhaarNumber ||
+                                    tenant.panNumber) && (
+                                    <div className="mt-5 pt-4 border-t border-slate-200/80">
+                                      <p className="text-sm font-semibold text-gray-500 mb-2">
+                                        Identification
+                                      </p>
+                                      <div className="flex flex-col space-y-1">
+                                        {tenant.aadhaarNumber && (
+                                          <p className="text-base text-gray-800">
+                                            <span className="font-medium">
+                                              Aadhaar:
+                                            </span>{" "}
+                                            {tenant.aadhaarNumber}
+                                          </p>
+                                        )}
+                                        {tenant.panNumber && (
+                                          <p className="text-base text-gray-800">
+                                            <span className="font-medium">
+                                              PAN:
+                                            </span>{" "}
+                                            {tenant.panNumber}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
+
+          {showTenantDetails && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-lg p-4">
+              <div className="bg-white shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="bg-gradient-to-r from-[#152238] via-[#1b2a41] to-[#243b55] p-6 text-white sticky top-0 z-10">
+                  <div className="flex justify-between items-start">
+                    {tenantDetails.length > 0 && (
+                      <div>
+                        <h2 className="text-2xl font-bold">
+                          {tenantDetails[0].name}
+                        </h2>
+                        <div className="flex flex-wrap gap-3 mt-3">
+                          {/* Email Pill */}
+                          {tenantDetails[0].email && (
+                            <div className="flex items-center bg-white/10 px-3 py-1.5 rounded-full text-sm">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="w-4 h-4 mr-2"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                                <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                              </svg>
+                              {tenantDetails[0].email}
+                            </div>
+                          )}
+                          {/* Phone Pill */}
+                          <div className="flex items-center bg-white/10 px-3 py-1.5 rounded-full text-sm">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="w-4 h-4 mr-2"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                            </svg>
+                            {tenantDetails[0].phone}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setShowTenantDetails(false)}
+                      className="text-white/80 hover:text-white text-2xl cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-6 sm:p-8">
+                  {tenantDetails.length > 0 ? (
+                    <div className="space-y-8">
+                      {tenantDetails.map((tenant, index) => (
+                        <div key={tenant.id}>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+                            {/* Identification */}
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2 text-blue-600"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M10 2a1 1 0 00-1 1v1a1 1 0 002 0V3a1 1 0 00-1-1zM4 4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1.172a2 2 0 01-1.414-.586l-.828-.828A2 2 0 0011.172 2H8.828a2 2 0 00-1.414.586l-.828.828A2 2 0 015.172 4H4zm2 8a4 4 0 118 0 4 4 0 01-8 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                Identification
+                              </h4>
+                              <div className="space-y-2 text-sm">
+                                <p className="text-black">
+                                  <span className="font-medium ">Aadhaar:</span>{" "}
+                                  {tenant.aadhaarNumber || "N/A"}
+                                </p>
+                                <p className="text-black">
+                                  <span className="font-medium">PAN:</span>{" "}
+                                  {tenant.panNumber || "N/A"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Agreement */}
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2 text-blue-600"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                Agreement
+                              </h4>
+                              <div className="space-y-2 text-sm">
+                                <p className="text-black">
+                                  <span className="font-medium">
+                                    Start Date:
+                                  </span>{" "}
+                                  {formatDateToDDMMYYYY(
+                                    tenant.agreementStartDate
+                                  )}
+                                </p>
+                                <p className="text-black">
+                                  <span className="font-medium">End Date:</span>{" "}
+                                  {formatDateToDDMMYYYY(
+                                    tenant.agreementEndDate
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Emergency Contact */}
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2 text-blue-600"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                Emergency Contact
+                              </h4>
+                              <p className="text-sm text-black">
+                                {tenant.emergencyContact || "Not provided"}
+                              </p>
+                            </div>
+
+                            {/* Documents */}
+                            <div className="md:col-span-2">
+                              <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2 text-blue-600"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a3 3 0 10-6 0v4a3 3 0 11-6 0V7a1 1 0 011-1h1V4a1 1 0 112 0v1h1a1 1 0 110 2H9v4a1 1 0 11-2 0V7a1 1 0 011-1h1V4z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                                Documents
+                              </h4>
+                              {tenant.documents &&
+                              tenant.documents.length > 0 ? (
+                                <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                                  {tenant.documents.map((doc, index) => (
+                                    <li key={index}>{doc}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-sm text-gray-600">
+                                  No documents uploaded
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-600 text-center py-10">
+                      No tenant details found.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === "members" && (
             <div className="bg-white shadow-sm overflow-hidden">
               <div className="p-4 md:p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -7405,6 +7863,7 @@ export default function AdminDashboard() {
                         "Phone",
                         "Unit Number",
                         "Member Since",
+                        "Property Status",
                         "Actions",
                       ].map((header) => (
                         <th
@@ -7418,7 +7877,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
-                    {filteredMembers.map((member) => (
+                    {filteredMembers.map((member: MemberDetails) => (
                       <tr
                         key={member.id}
                         className="hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
@@ -7439,7 +7898,33 @@ export default function AdminDashboard() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {member.memberSince}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {member.isPropertyRented !== undefined ? (
+                            <span
+                              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                member.isPropertyRented
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-green-100 text-green-800"
+                              }`}
+                            >
+                              {member.isPropertyRented ? "Rented" : "Owned"}
+                            </span>
+                          ) : (
+                            "Not specified"
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          {member.isPropertyRented && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTenantClick(member.id);
+                              }}
+                              className="text-blue-600 hover:text-blue-800 mr-3 cursor-pointer"
+                            >
+                              View Tenant
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -7463,6 +7948,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {activeTab === "payments" && (
             <div className="bg-white shadow-sm overflow-hidden">
               <div className="p-4 md:p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -7949,6 +8435,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {activeTab === "complaints" && (
             <div className="bg-white shadow-sm overflow-hidden">
               <div className="p-4 md:p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -8003,9 +8490,9 @@ export default function AdminDashboard() {
               </div>
 
               {/* Complaints Table */}
-              <div className="shadow-xl overflow-hidden border border-gray-200 bg-white">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse">
+            <div className="shadow-xl overflow-hidden border border-gray-200 bg-white"> 
+              <div className="overflow-x-auto"> 
+                <table className="min-w-full border-collapse">
                     <thead className="bg-[#152238]">
                       <tr>
                         {[
@@ -8018,7 +8505,6 @@ export default function AdminDashboard() {
                           "Created",
                           "Actions",
                           "Files",
-                          "Updated",
                         ].map((header) => (
                           <th
                             key={header}
@@ -8227,12 +8713,6 @@ export default function AdminDashboard() {
                                 </button>
                               </div>
                             </td>
-
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-600">
-                                {formatDateTime(complaint.updatedAt)}
-                              </div>
-                            </td>
                           </tr>
                         ))}
                     </tbody>
@@ -8398,156 +8878,158 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
-                      {filteredVehicles.map((vehicle: any) => (
-                        <tr
-                          key={`${vehicle.memberId}-${vehicle.id}`}
-                          className="hover:bg-blue-50/30 transition-colors duration-150 group"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
-                                <span className="font-medium text-blue-700">
-                                  {vehicle.memberName?.charAt(0) || "U"}
-                                </span>
+                      {filteredVehicles.map(
+                        (vehicle: VehicleWithMemberInfo) => (
+                          <tr
+                            key={`${vehicle.memberId}-${vehicle.id}`}
+                            className="hover:bg-blue-50/30 transition-colors duration-150 group"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                  <span className="font-medium text-blue-700">
+                                    {vehicle.memberName?.charAt(0) || "U"}
+                                  </span>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {vehicle.memberName}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    Unit {vehicle.memberUnit}
+                                  </div>
+                                </div>
                               </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
                               <div>
                                 <div className="text-sm font-medium text-gray-900">
-                                  {vehicle.memberName}
+                                  {vehicle.type}
                                 </div>
-                                <div className="text-sm text-gray-500">
-                                  Unit {vehicle.memberUnit}
+                                <div className="text-sm text-gray-900">
+                                  {vehicle.model}
+                                </div>
+                                {vehicle.rcBookNumber && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    RC: {vehicle.rcBookNumber}
+                                  </div>
+                                )}
+                                <div className="text-sm text-gray-600 font-mono bg-gray-100 px-2 py-1 rounded mt-1">
+                                  {vehicle.numberPlate}
                                 </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {vehicle.type}
-                              </div>
-                              <div className="text-sm text-gray-900">
-                                {vehicle.model}
-                              </div>
-                              {vehicle.rcBookNumber && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  RC: {vehicle.rcBookNumber}
-                                </div>
-                              )}
-                              <div className="text-sm text-gray-600 font-mono bg-gray-100 px-2 py-1 rounded mt-1">
-                                {vehicle.numberPlate}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                vehicle.parking
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                              }`}
-                            >
-                              {vehicle.parking ? "Assigned" : "Not Assigned"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {/* <div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  vehicle.parking
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
+                                {vehicle.parking ? "Assigned" : "Not Assigned"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {/* <div>
                               Start:{" "}
                               {vehicle.startDate
                                 ? formatDateTime(vehicle.startDate)
                                 : "-"}
                             </div> */}
-                            <div>
-                              End:{" "}
-                              {vehicle.endDate
-                                ? formatDateTime(vehicle.endDate)
-                                : "-"}
-                            </div>
-                          </td>
+                              <div>
+                                End:{" "}
+                                {vehicle.endDate
+                                  ? formatDateTime(vehicle.endDate)
+                                  : "-"}
+                              </div>
+                            </td>
 
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                vehicle.isCurrent
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {vehicle.isCurrent ? "Current" : "Past"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            {vehicle.isCurrent ? (
-                              <button
-                                onClick={() => {
-                                  const endDateStr = prompt(
-                                    "Enter end date (YYYY-MM-DD):",
-                                    new Date().toISOString().split("T")[0]
-                                  );
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  vehicle.isCurrent
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-gray-100 text-gray-800"
+                                }`}
+                              >
+                                {vehicle.isCurrent ? "Current" : "Past"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              {vehicle.isCurrent ? (
+                                <button
+                                  onClick={() => {
+                                    const endDateStr = prompt(
+                                      "Enter end date (YYYY-MM-DD):",
+                                      new Date().toISOString().split("T")[0]
+                                    );
 
-                                  if (endDateStr) {
-                                    const endDate = (() => {
-                                      const [year, month, day] = endDateStr
-                                        .split("-")
-                                        .map(Number);
-                                      const now = new Date();
-                                      const dateWithTime = new Date(
-                                        year,
-                                        month - 1,
-                                        day,
-                                        now.getHours(),
-                                        now.getMinutes(),
-                                        now.getSeconds(),
-                                        now.getMilliseconds()
+                                    if (endDateStr) {
+                                      const endDate = (() => {
+                                        const [year, month, day] = endDateStr
+                                          .split("-")
+                                          .map(Number);
+                                        const now = new Date();
+                                        const dateWithTime = new Date(
+                                          year,
+                                          month - 1,
+                                          day,
+                                          now.getHours(),
+                                          now.getMinutes(),
+                                          now.getSeconds(),
+                                          now.getMilliseconds()
+                                        );
+                                        return Timestamp.fromDate(dateWithTime);
+                                      })();
+
+                                      handleUpdateVehicleStatus(
+                                        vehicle.memberId,
+                                        vehicle.id,
+                                        false,
+                                        endDate
                                       );
-                                      return Timestamp.fromDate(dateWithTime);
-                                    })();
-
+                                    }
+                                  }}
+                                  className="text-orange-600 hover:text-orange-900 mr-3 cursor-pointer"
+                                >
+                                  Mark as Past
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() =>
                                     handleUpdateVehicleStatus(
                                       vehicle.memberId,
                                       vehicle.id,
-                                      false,
-                                      endDate
-                                    );
+                                      true
+                                    )
                                   }
-                                }}
-                                className="text-orange-600 hover:text-orange-900 mr-3 cursor-pointer"
-                              >
-                                Mark as Past
-                              </button>
-                            ) : (
+                                  className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
+                                >
+                                  Mark as Current
+                                </button>
+                              )}
                               <button
                                 onClick={() =>
-                                  handleUpdateVehicleStatus(
+                                  handleDeleteVehicle(
                                     vehicle.memberId,
-                                    vehicle.id,
-                                    true
+                                    vehicle.id
                                   )
                                 }
-                                className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
+                                className="text-red-600 hover:text-red-900 cursor-pointer"
                               >
-                                Mark as Current
+                                Delete
                               </button>
-                            )}
-                            <button
-                              onClick={() =>
-                                handleDeleteVehicle(
-                                  vehicle.memberId,
-                                  vehicle.id
-                                )
-                              }
-                              className="text-red-600 hover:text-red-900 cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                          </tr>
+                        )
+                      )}
                     </tbody>
                   </table>
 
                   {filteredVehicles.length === 0 && (
                     <div className="p-12 text-center">
-                      <div className="mx-auto w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                      <div className="mx-auto text-black w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
                         <VehicleIcon />
                       </div>
                       <h3 className="text-lg font-medium text-gray-900 mb-1">
@@ -8566,6 +9048,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {/* Add Vehicle Popup */}
           {showAddVehiclePopup && (
             <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -8823,6 +9306,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
           {activeTab === "serviceProviders" && (
             <div className="bg-white shadow-sm overflow-hidden rounded-xl">
               <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -9419,7 +9903,7 @@ export default function AdminDashboard() {
                     </svg>
                   </div>
                   <h3 className="text-xl font-bold text-gray-800">
-                    Yesh Krupa Society
+                    YeshKrupa Society
                   </h3>
                 </div>
                 <p className="text-gray-600 text-m leading-relaxed mb-6">
@@ -9505,7 +9989,7 @@ export default function AdminDashboard() {
             <div className="border-t border-gray-300 mt-12 pt-6 flex flex-col md:flex-row justify-between items-center">
               <div className="mb-4 md:mb-0">
                 <p className="text-gray-600 text-sm">
-                  © 2003 - {new Date().getFullYear()} Yesh Krupa Society. All
+                  © 2003 - {new Date().getFullYear()} YeshKrupa Society. All
                   rights reserved.
                 </p>
               </div>
@@ -9699,7 +10183,7 @@ export default function AdminDashboard() {
 
             <div className="mb-4">
               <p className="text-gray-600 mb-2">
-                <strong>Yesh Krupa Society</strong>
+                <strong>YeshKrupa Society</strong>
                 <br />
                 Chikuwadi, Shimpoli Road, Borivali West, Mumbai, Maharashtra
                 400092
@@ -9715,7 +10199,7 @@ export default function AdminDashboard() {
                 allowFullScreen
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
-                title="Yesh Krupa Society Location"
+                title="YeshKrupa Society Location"
               ></iframe>
             </div>
           </div>
