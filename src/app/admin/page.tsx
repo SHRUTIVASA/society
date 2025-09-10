@@ -314,12 +314,6 @@ interface LoginActivity {
   failureReason?: string;
 }
 
-function removeUndefined<T extends object>(obj: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([_, v]) => v !== undefined)
-  ) as Partial<T>;
-}
-
 interface TimestampLike {
   toDate?: () => Date;
   seconds?: number;
@@ -1704,39 +1698,6 @@ export default function AdminDashboard() {
       fetchData();
     } catch (error) {
       console.error("Error approving testimonial:", error);
-    }
-  };
-
-  const handleRejectTestimonial = async (id: string) => {
-    try {
-      const testimonial = testimonials.find((t) => t.id === id);
-      if (!testimonial) {
-        console.error("Testimonial not found!");
-        return;
-      }
-
-      await updateDoc(doc(db, "testimonials", id), {
-        approved: false,
-        rejected: true,
-        updatedAt: serverTimestamp(),
-      });
-
-      await logActivity(
-        user?.uid || "system",
-        adminDetails?.name || "Admin",
-        "admin",
-        "reject_testimonial",
-        `Rejected testimonial by ${testimonial.name} (Unit: ${testimonial.unit}, Rating: ${testimonial.rating})`,
-        {
-          testimonialId: id,
-          contentSnippet: testimonial.content.slice(0, 100),
-          rating: testimonial.rating,
-        }
-      );
-
-      fetchData();
-    } catch (error) {
-      console.error("Error rejecting testimonial:", error);
     }
   };
 
@@ -3949,13 +3910,12 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await logActivity(
+      await logLoginActivity(
         user?.uid || "system",
         adminDetails?.name || "Admin",
         "admin",
-        "logout",
-        `Admin logged out`,
-        { email: user?.email }
+        true,
+        `Admin logged out successfully`
       );
 
       await signOut(auth);
@@ -7873,7 +7833,7 @@ export default function AdminDashboard() {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <div className="text-sm text-gray-700 max-w-xs truncate">
+                              <div className="text-sm text-gray-700 max-w">
                                 {testimonial.content}
                               </div>
                             </td>
@@ -7903,17 +7863,6 @@ export default function AdminDashboard() {
                                     className="text-green-600 hover:text-green-900 text-left cursor-pointer"
                                   >
                                     Approve
-                                  </button>
-                                )}
-
-                                {!testimonial.approved && (
-                                  <button
-                                    onClick={() =>
-                                      handleRejectTestimonial(testimonial.id)
-                                    }
-                                    className="text-green-600 hover:text-green-900 text-left cursor-pointer"
-                                  >
-                                    Reject
                                   </button>
                                 )}
                                 <button

@@ -264,21 +264,6 @@ interface Admin {
   adminPosition: string;
 }
 
-interface DeletionRequest {
-  id: string;
-  adminId: string;
-  adminName: string;
-  adminEmail: string;
-  itemType: string;
-  itemId: string;
-  itemName: string;
-  reason?: string;
-  status: "pending" | "approved" | "rejected";
-  createdAt: Timestamp;
-  reviewedBy?: string;
-  reviewedAt?: Timestamp;
-}
-
 interface ChatMessage {
   id: string;
   sender: "member" | "admin";
@@ -765,11 +750,55 @@ export default function MemberDashboard() {
     }
   };
 
+  const logActivity = async (
+    userId: string,
+    userName: string,
+    userType: "admin" | "member" | "system",
+    action: string,
+    description: string,
+    details?: Record<string, unknown>
+  ) => {
+    try {
+      await addDoc(collection(db, "activityLogs"), {
+        userId,
+        userName,
+        userType,
+        action,
+        description,
+        timestamp: serverTimestamp(),
+        ...(details !== undefined && { details }),
+      });
+    } catch (error) {
+      console.error("Error logging activity:", error);
+    }
+  };
+
+  const logLoginActivity = async (
+    userId: string,
+    userName: string,
+    userType: "admin" | "member" | "system",
+    success: boolean,
+    failureReason?: string
+  ) => {
+    try {
+      await addDoc(collection(db, "loginHistory"), {
+        userId,
+        userName,
+        userType,
+        timestamp: serverTimestamp(),
+        success,
+        ...(failureReason !== undefined && { failureReason }),
+      });
+    } catch (error) {
+      console.error("Error logging login activity:", error);
+    }
+  };
+
   const handleUpdateRedevelopmentForm = async (
     formId: string,
     updates: Partial<RedevelopmentForm>
   ) => {
-    if (!user) return false;
+    if (!user || !userData) return false;
 
     try {
       const formRef = doc(db, "redevelopmentForms", formId);
@@ -781,6 +810,15 @@ export default function MemberDashboard() {
           ...updates,
           updatedAt: serverTimestamp(),
         });
+
+        await logActivity(
+          user.uid,
+          userData.name,
+          "member",
+          "update_redevelopment_form",
+          `Updated redevelopment form ID: ${formId.slice(-6)}`,
+          { formId, updates }
+        );
 
         fetchUserRedevelopmentForms();
         alert("Form updated successfully!");
@@ -874,7 +912,6 @@ export default function MemberDashboard() {
     fetchCommitteeMembers();
   }, []);
 
-  // Group members by position type for better organization
   const groupedMembers = {
     leadership: committeeMembers.filter((member) =>
       ["Chairperson", "Vice Chairperson", "Treasurer", "Secretary"].includes(
@@ -1045,7 +1082,7 @@ export default function MemberDashboard() {
 
   // Add comment to form
   const handleAddFormComment = async (formId: string, comment: string) => {
-    if (!user || !comment.trim()) return;
+    if (!user || !userData || !comment.trim()) return;
 
     try {
       await addDoc(collection(db, "redevelopmentForms", formId, "comments"), {
@@ -1055,6 +1092,15 @@ export default function MemberDashboard() {
         comment: comment.trim(),
         timestamp: serverTimestamp(),
       });
+
+      await logActivity(
+        user.uid,
+        userData.name,
+        "member",
+        "add_redevelopment_comment",
+        `Added a comment to redevelopment form ID: ${formId.slice(-6)}`,
+        { formId }
+      );
 
       setFormComment("");
       fetchUserRedevelopmentForms();
@@ -1128,17 +1174,60 @@ export default function MemberDashboard() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
       auth,
-      (currentUser: FirebaseUser | null) => {
+      async (currentUser: FirebaseUser | null) => {
         if (currentUser) {
-          const userObj: User = {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: currentUser.displayName,
-          };
-          setUser(userObj);
-          fetchUserData(currentUser.uid);
-          setupRealtimeListeners(currentUser.uid);
+          try {
+            const memberDocRef = doc(db, "members", currentUser.uid);
+            const memberDocSnap = await getDoc(memberDocRef);
+
+            const lastSignIn = currentUser.metadata.lastSignInTime
+              ? new Date(currentUser.metadata.lastSignInTime).getTime()
+              : Date.now();
+            const sessionKey = `login_${currentUser.uid}_${lastSignIn}`;
+
+            if (memberDocSnap.exists()) {
+              const memberData = memberDocSnap.data() as Member;
+              const userObj: User = {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                displayName: currentUser.displayName,
+              };
+              setUser(userObj); 
+
+              if (!localStorage.getItem(sessionKey)) {
+                await logLoginActivity(
+                  currentUser.uid,
+                  memberData.name || "Member",
+                  "member",
+                  true
+                );
+                localStorage.setItem(sessionKey, "true");
+              } // Proceed with fetching data
+
+              fetchUserData(currentUser.uid);
+              setupRealtimeListeners(currentUser.uid);
+            } else {
+              if (!localStorage.getItem(sessionKey)) {
+                await logLoginActivity(
+                  currentUser.uid,
+                  currentUser.email || "Unknown",
+                  "system",
+                  false,
+                  "User not found in member records."
+                );
+                localStorage.setItem(sessionKey, "true");
+              }
+              await signOut(auth); 
+              router.push("/");
+            }
+          } catch (error) {
+            console.error("Error verifying member:", error);
+            await signOut(auth);
+            router.push("/");
+          }
         } else {
+          setUser(null);
+          setLoading(false);
           router.push("/");
         }
       }
@@ -1166,7 +1255,6 @@ export default function MemberDashboard() {
     setIsSubmitting(true);
 
     try {
-      // Add query to Firestore
       const docRef = await addDoc(collection(db, "queries"), {
         name: contactName,
         email: contactEmail,
@@ -1178,7 +1266,6 @@ export default function MemberDashboard() {
 
       console.log("Query submitted with ID: ", docRef.id);
 
-      // Reset form
       setContactName("");
       setContactEmail("");
       setContactPhone("");
@@ -1188,7 +1275,6 @@ export default function MemberDashboard() {
         "Your message has been sent successfully! We'll get back to you soon."
       );
 
-      // Auto-close the modal after success
       setTimeout(() => {
         setShowContactModal(false);
         setContactSuccess("");
@@ -1206,7 +1292,7 @@ export default function MemberDashboard() {
       const userDoc = await getDoc(doc(db, "members", userId));
       if (userDoc.exists()) {
         const data = userDoc.data() as Member;
-        setUserData(data); // Set userData state
+        setUserData(data);
 
         // Fetch family members
         const familySnapshot = await getDocs(
@@ -1473,7 +1559,7 @@ export default function MemberDashboard() {
     if (!user || !userData) return;
 
     try {
-      await addDoc(collection(db, "suggestions"), {
+      const docRef = await addDoc(collection(db, "suggestions"), {
         title: newSuggestion.title,
         description: newSuggestion.description,
         category: newSuggestion.category,
@@ -1491,6 +1577,19 @@ export default function MemberDashboard() {
         },
         comments: [],
       });
+
+      await logActivity(
+        user.uid,
+        userData.name,
+        "member",
+        "submit_suggestion",
+        `Submitted a new suggestion: "${newSuggestion.title}"`,
+        {
+          suggestionId: docRef.id,
+          category: newSuggestion.category,
+          priority: newSuggestion.priority,
+        }
+      );
 
       setNewSuggestion({
         title: "",
@@ -1511,7 +1610,7 @@ export default function MemberDashboard() {
     suggestionId: string,
     voteType: "upvote" | "downvote"
   ) => {
-    if (!user) return;
+    if (!user || !userData) return;
 
     try {
       const suggestionRef = doc(db, "suggestions", suggestionId);
@@ -1536,17 +1635,14 @@ export default function MemberDashboard() {
 
       if (voteType === "upvote") {
         if (hasUpvoted) {
-          // Remove upvote
           newVotes.upvotes -= 1;
           newVotes.voters = newVotes.voters.filter(
             (v) => v !== `${user.uid}_upvote`
           );
         } else {
-          // Add upvote
           newVotes.upvotes += 1;
           newVotes.voters.push(`${user.uid}_upvote`);
 
-          // Remove downvote if exists
           if (hasDownvoted) {
             newVotes.downvotes -= 1;
             newVotes.voters = newVotes.voters.filter(
@@ -1556,17 +1652,14 @@ export default function MemberDashboard() {
         }
       } else {
         if (hasDownvoted) {
-          // Remove downvote
           newVotes.downvotes -= 1;
           newVotes.voters = newVotes.voters.filter(
             (v) => v !== `${user.uid}_downvote`
           );
         } else {
-          // Add downvote
           newVotes.downvotes += 1;
           newVotes.voters.push(`${user.uid}_downvote`);
 
-          // Remove upvote if exists
           if (hasUpvoted) {
             newVotes.upvotes -= 1;
             newVotes.voters = newVotes.voters.filter(
@@ -1580,6 +1673,15 @@ export default function MemberDashboard() {
         votes: newVotes,
         updatedAt: serverTimestamp(),
       });
+
+      // await logActivity(
+      //   user.uid,
+      //   userData.name,
+      //   "member",
+      //   "vote_suggestion",
+      //   `Voted "${voteType}" on suggestion: "${suggestionData.title}"`,
+      //   { suggestionId, voteType }
+      // );
     } catch (error) {
       console.error("Error voting on suggestion:", error);
       alert("Error voting on suggestion. Please try again.");
@@ -1619,10 +1721,10 @@ export default function MemberDashboard() {
 
   const handleSubmitTestimonial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !userData) return;
 
     try {
-      await addDoc(collection(db, "testimonials"), {
+      const docRef = await addDoc(collection(db, "testimonials"), {
         content: newTestimonial.content,
         rating: newTestimonial.rating,
         name: userData?.name || "Anonymous",
@@ -1631,6 +1733,15 @@ export default function MemberDashboard() {
         createdAt: serverTimestamp(),
         userId: user.uid,
       });
+
+      await logActivity(
+        user.uid,
+        userData.name,
+        "member",
+        "submit_testimonial",
+        `Submitted a new testimonial with a rating of ${newTestimonial.rating}/5.`,
+        { testimonialId: docRef.id, rating: newTestimonial.rating }
+      );
 
       setNewTestimonial({
         content: "",
@@ -1647,7 +1758,7 @@ export default function MemberDashboard() {
 
   const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !userData) return;
 
     if (newVehicleFiles.length > 0) {
       console.log(
@@ -1659,7 +1770,7 @@ export default function MemberDashboard() {
     try {
       const vehiclesRef = collection(db, "members", user.uid, "vehicles");
 
-      await addDoc(vehiclesRef, {
+      const docRef = await addDoc(vehiclesRef, {
         ...newVehicle,
         memberId: user.uid,
         memberName: userData?.name || "Member",
@@ -1667,6 +1778,15 @@ export default function MemberDashboard() {
         createdAt: new Date(),
         rcBookFileUrls: [],
       });
+
+      await logActivity(
+        user.uid,
+        userData.name,
+        "member",
+        "add_vehicle",
+        `Added a new vehicle: ${newVehicle.model} (${newVehicle.numberPlate})`,
+        { vehicleId: docRef.id, vehicleType: newVehicle.type }
+      );
 
       setNewVehicle({
         type: "Car",
@@ -1694,7 +1814,7 @@ export default function MemberDashboard() {
     isCurrent: boolean,
     endDate?: string
   ) => {
-    if (!user) return;
+    if (!user || !userData) return;
 
     try {
       const vehicleDocRef = doc(db, "members", user.uid, "vehicles", vehicleId);
@@ -1712,6 +1832,18 @@ export default function MemberDashboard() {
       }
 
       await updateDoc(vehicleDocRef, updateData);
+
+      await logActivity(
+        user.uid,
+        userData.name,
+        "member",
+        "update_vehicle_status",
+        `Updated vehicle status to ${
+          isCurrent ? "Current" : "Past"
+        } for vehicle ID: ${vehicleId.slice(-6)}`,
+        { vehicleId: vehicleId, newStatus: isCurrent ? "Current" : "Past" }
+      );
+
       alert("Vehicle status updated successfully!");
     } catch (error) {
       console.error("Error updating vehicle status:", error);
@@ -1719,7 +1851,6 @@ export default function MemberDashboard() {
     }
   };
 
-  // SuggestionCard component with proper typing
   const SuggestionCard = ({
     suggestion,
     user,
@@ -1741,307 +1872,6 @@ export default function MemberDashboard() {
       if (commentInput.trim()) {
         onAddComment(suggestion.id, commentInput);
         setCommentInput("");
-      }
-    };
-
-    const handleLogout = async () => {
-      setIsLoggingOut(true);
-      try {
-        setUser(null);
-        setUserData(null);
-        setFamilyMembers([]);
-        setVehicles([]);
-        setComplaints([]);
-        setPayments([]);
-
-        await signOut(auth);
-
-        router.push("/");
-      } catch (error) {
-        console.error("Error signing out:", error);
-        router.push("/");
-      } finally {
-        setIsLoggingOut(false);
-      }
-    };
-
-    // Add these handler functions
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files) {
-        const filesArray = Array.from(e.target.files);
-        setRedevelopmentForm({
-          ...redevelopmentForm,
-          files: filesArray,
-        });
-      }
-    };
-
-    const handleSubmitRedevelopment = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!user) return;
-
-      if (
-        !redevelopmentForm.name.trim() ||
-        !redevelopmentForm.email.trim() ||
-        !redevelopmentForm.phone.trim()
-      ) {
-        alert("Please fill in all compulsory fields: Name, Email, and Phone.");
-        return;
-      }
-
-      setIsSubmittingRedevelopment(true);
-      setUploadProgress(0);
-
-      try {
-        let fileUrls: string[] = [];
-        if (redevelopmentForm.files.length > 0) {
-          // You'll need to implement file upload logic here
-          // This is a placeholder for the actual implementation
-          for (let i = 0; i < redevelopmentForm.files.length; i++) {
-            // Simulate upload progress
-            setUploadProgress((i / redevelopmentForm.files.length) * 100);
-            // Actual upload code would go here
-            await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate upload delay
-          }
-          setUploadProgress(100);
-        }
-
-        const vacateDateTimestamp = redevelopmentForm.vacateDate
-          ? Timestamp.fromDate(redevelopmentForm.vacateDate)
-          : null;
-
-        // Save form data to Firestore
-        const formRef = await addDoc(collection(db, "redevelopmentForms"), {
-          userId: user.uid,
-          userName: userData?.name || "",
-          userUnit: userData?.unitNumber || "",
-          userEmail: user.email || "",
-          name: redevelopmentForm.name,
-          phone: redevelopmentForm.phone,
-          email: redevelopmentForm.email,
-          vacateDate: vacateDateTimestamp,
-          alternateAddress: redevelopmentForm.alternateAddress,
-          fileUrls: [],
-          submittedAt: serverTimestamp(),
-          status: "pending",
-          initialComments: redevelopmentForm.comments.trim() || null,
-        });
-
-        if (redevelopmentForm.comments.trim()) {
-          await addDoc(
-            collection(db, "redevelopmentForms", formRef.id, "comments"),
-            {
-              userId: user.uid,
-              userName: userData?.name || "Member",
-              userType: "member",
-              comment: redevelopmentForm.comments.trim(),
-              timestamp: serverTimestamp(),
-            }
-          );
-        }
-
-        // Reset form
-        setRedevelopmentForm({
-          name: "",
-          phone: "",
-          email: "",
-          vacateDate: null,
-          alternateAddress: "",
-          comments: "",
-          files: [],
-        });
-
-        setShowRedevelopmentForm(false);
-        fetchUserRedevelopmentForms();
-        alert("Redevelopment form submitted successfully!");
-      } catch (error) {
-        console.error("Error submitting redevelopment form:", error);
-        alert("Error submitting form. Please try again.");
-      } finally {
-        setIsSubmittingRedevelopment(false);
-        setUploadProgress(0);
-      }
-    };
-
-    const handleSubmitComplaint = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!user) return;
-
-      try {
-        const complaintId = `#${Date.now().toString().slice(-6)}`;
-        const userComplaintsDocRef = doc(db, "complaints", user.uid);
-
-        const docSnapshot = await getDoc(userComplaintsDocRef);
-
-        if (docSnapshot.exists()) {
-          // Update existing document with new complaint
-          await updateDoc(userComplaintsDocRef, {
-            [complaintId]: {
-              type: newComplaint.type,
-              title: newComplaint.title,
-              description: newComplaint.description,
-              status: "Pending",
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-          });
-        } else {
-          // Create new document with first complaint
-          await setDoc(userComplaintsDocRef, {
-            userId: user.uid,
-            [complaintId]: {
-              type: newComplaint.type,
-              title: newComplaint.title,
-              description: newComplaint.description,
-              status: "Pending",
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-          });
-        }
-
-        setNewComplaint({
-          type: "",
-          title: "",
-          description: "",
-        });
-
-        setShowComplaintModal(false);
-        alert("Complaint submitted successfully!");
-      } catch (error) {
-        console.error("Error submitting complaint:", error);
-        alert("Error submitting complaint. Please try again.");
-      }
-    };
-
-    const handleUpdateProfile = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!user) return;
-
-      try {
-        // Update main member document
-        await updateDoc(doc(db, "members", user.uid), {
-          name: editProfileData.name,
-          phone: editProfileData.phone,
-          unitNumber: editProfileData.unitNumber,
-          alternateAddress: editProfileData.alternateAddress || "",
-          propertyStatus: editProfileData.propertyStatus || "owned",
-          isPropertyRented: editProfileData.isPropertyRented || false,
-          agreementStartDate:
-            editProfileData.propertyStatus === "rented"
-              ? editProfileData.agreementStartDate
-              : "",
-          agreementEndDate:
-            editProfileData.propertyStatus === "rented"
-              ? editProfileData.agreementEndDate
-              : "",
-          updatedAt: new Date(),
-        });
-
-        // Update family members subcollection
-        const familyMembersRef = collection(
-          db,
-          "members",
-          user.uid,
-          "familyMembers"
-        );
-        const existingFamily = await getDocs(familyMembersRef);
-        const deletePromises = existingFamily.docs.map((doc) =>
-          deleteDoc(doc.ref)
-        );
-        await Promise.all(deletePromises);
-
-        const addFamilyPromises = editProfileData.familyMembers.map((member) =>
-          addDoc(familyMembersRef, {
-            name: member.name,
-            relation: member.relation,
-            age: member.age,
-          })
-        );
-        await Promise.all(addFamilyPromises);
-
-        // Update vehicles subcollection
-        const vehiclesRef = collection(db, "members", user.uid, "vehicles");
-        const existingVehicles = await getDocs(vehiclesRef);
-        const deleteVehiclePromises = existingVehicles.docs.map((doc) =>
-          deleteDoc(doc.ref)
-        );
-        await Promise.all(deleteVehiclePromises);
-
-        const addVehiclePromises = editProfileData.vehicles.map((vehicle) => {
-          // Convert string dates to Timestamp objects
-          const startDate =
-            typeof vehicle.startDate === "string"
-              ? Timestamp.fromDate(new Date(vehicle.startDate))
-              : vehicle.startDate;
-
-          const endDate =
-            vehicle.isCurrent || !vehicle.endDate
-              ? null
-              : typeof vehicle.endDate === "string"
-              ? Timestamp.fromDate(new Date(vehicle.endDate))
-              : vehicle.endDate;
-
-          return addDoc(vehiclesRef, {
-            type: vehicle.type,
-            numberPlate: vehicle.numberPlate,
-            model: vehicle.model,
-            rcBookNumber: vehicle.rcBookNumber || "",
-            rcBookFileUrls: [],
-            parking: vehicle.parking || false,
-            isCurrent: vehicle.isCurrent,
-            startDate: startDate,
-            endDate: endDate,
-          });
-        });
-        await Promise.all(addVehiclePromises);
-
-        // Update tenants subcollection
-        const tenantsRef = collection(db, "members", user.uid, "tenants");
-        const existingTenants = await getDocs(tenantsRef);
-        const deleteTenantPromises = existingTenants.docs.map((doc) =>
-          deleteDoc(doc.ref)
-        );
-        await Promise.all(deleteTenantPromises);
-
-        const addTenantPromises = (editProfileData.tenants || []).map(
-          (tenant) =>
-            addDoc(tenantsRef, {
-              name: tenant.name,
-              phone: tenant.phone,
-              email: tenant.email,
-              aadhaarNumber: tenant.aadhaarNumber || "",
-              panNumber: tenant.panNumber || "",
-              agreementStartDate: tenant.agreementStartDate,
-              agreementEndDate: tenant.agreementEndDate,
-              emergencyContact: tenant.emergencyContact || "",
-              documents: tenant.documents || [],
-            })
-        );
-        await Promise.all(addTenantPromises);
-
-        // Update local state
-        setUserData({
-          ...userData,
-          name: editProfileData.name,
-          phone: editProfileData.phone,
-          unitNumber: editProfileData.unitNumber,
-          isPropertyRented: editProfileData.isPropertyRented,
-        } as Member);
-
-        // Refresh vehicles list
-        const vehiclesSnapshot = await getDocs(vehiclesRef);
-        const vehiclesData = vehiclesSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Vehicle[];
-        setVehicles(vehiclesData);
-
-        setShowEditProfileModal(false);
-        alert("Profile updated successfully!");
-      } catch (error) {
-        console.error("Error updating profile:", error);
-        alert("Error updating profile. Please try again.");
       }
     };
 
@@ -2281,6 +2111,15 @@ export default function MemberDashboard() {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
+      if (user && userData) {
+        await logLoginActivity(
+          user.uid,
+          userData.name,
+          "member",
+          true,
+          `Member logged out successfully`
+        );
+      }
       setUser(null);
       setUserData(null);
       setFamilyMembers([]);
@@ -2312,7 +2151,7 @@ export default function MemberDashboard() {
 
   const handleSubmitRedevelopment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !userData) return;
 
     if (
       !redevelopmentForm.name.trim() ||
@@ -2329,13 +2168,9 @@ export default function MemberDashboard() {
     try {
       let fileUrls: string[] = [];
       if (redevelopmentForm.files.length > 0) {
-        // You'll need to implement file upload logic here
-        // This is a placeholder for the actual implementation
         for (let i = 0; i < redevelopmentForm.files.length; i++) {
-          // Simulate upload progress
           setUploadProgress((i / redevelopmentForm.files.length) * 100);
-          // Actual upload code would go here
-          await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate upload delay
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
         setUploadProgress(100);
       }
@@ -2360,6 +2195,15 @@ export default function MemberDashboard() {
         status: "pending",
         initialComments: redevelopmentForm.comments.trim() || null,
       });
+
+      await logActivity(
+        user.uid,
+        userData.name,
+        "member",
+        "submit_redevelopment_form",
+        `Submitted a new redevelopment form.`,
+        { formId: formRef.id }
+      );
 
       if (redevelopmentForm.comments.trim()) {
         await addDoc(
@@ -2399,40 +2243,42 @@ export default function MemberDashboard() {
 
   const handleSubmitComplaint = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !userData) return;
 
     try {
       const complaintId = `#${Date.now().toString().slice(-6)}`;
       const userComplaintsDocRef = doc(db, "complaints", user.uid);
 
+      const complaintPayload = {
+        type: newComplaint.type,
+        title: newComplaint.title,
+        description: newComplaint.description,
+        status: "Pending",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
       const docSnapshot = await getDoc(userComplaintsDocRef);
 
       if (docSnapshot.exists()) {
-        // Update existing document with new complaint
         await updateDoc(userComplaintsDocRef, {
-          [complaintId]: {
-            type: newComplaint.type,
-            title: newComplaint.title,
-            description: newComplaint.description,
-            status: "Pending",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
+          [complaintId]: complaintPayload,
         });
       } else {
-        // Create new document with first complaint
         await setDoc(userComplaintsDocRef, {
           userId: user.uid,
-          [complaintId]: {
-            type: newComplaint.type,
-            title: newComplaint.title,
-            description: newComplaint.description,
-            status: "Pending",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
+          [complaintId]: complaintPayload,
         });
       }
+
+      await logActivity(
+        user.uid,
+        userData.name,
+        "member",
+        "submit_complaint",
+        `Submitted a new complaint: "${newComplaint.title}"`,
+        { complaintId: complaintId, complaintType: newComplaint.type }
+      );
 
       setNewComplaint({
         type: "",
@@ -2610,6 +2456,20 @@ export default function MemberDashboard() {
           ...data,
         };
       });
+
+      await logActivity(
+        user.uid,
+        editProfileData.name,
+        "member",
+        "update_profile",
+        `Updated profile information.`,
+        {
+          phone: editProfileData.phone,
+          unit: editProfileData.unitNumber,
+          familyMembersCount: editProfileData.familyMembers.length,
+          vehiclesCount: editProfileData.vehicles.length,
+        }
+      );
 
       setVehicles(vehiclesData);
       setShowEditProfileModal(false);
