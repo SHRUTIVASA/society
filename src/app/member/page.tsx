@@ -778,7 +778,7 @@ export default function MemberDashboard() {
     userName: string,
     userType: "admin" | "member" | "system",
     success: boolean,
-    failureReason?: string
+    reason?: string
   ) => {
     try {
       await addDoc(collection(db, "loginHistory"), {
@@ -787,7 +787,7 @@ export default function MemberDashboard() {
         userType,
         timestamp: serverTimestamp(),
         success,
-        ...(failureReason !== undefined && { failureReason }),
+        ...(reason !== undefined && { reason }),
       });
     } catch (error) {
       console.error("Error logging login activity:", error);

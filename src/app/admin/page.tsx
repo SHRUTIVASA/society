@@ -311,7 +311,7 @@ interface LoginActivity {
   userType: "admin" | "member";
   timestamp: Timestamp;
   success: boolean;
-  failureReason?: string;
+  reason?: string;
 }
 
 interface TimestampLike {
@@ -3395,7 +3395,7 @@ export default function AdminDashboard() {
     userName: string,
     userType: "admin" | "member" | "system",
     success: boolean,
-    failureReason?: string
+    reason?: string
   ) => {
     try {
       await addDoc(collection(db, "loginHistory"), {
@@ -3404,7 +3404,7 @@ export default function AdminDashboard() {
         userType,
         timestamp: serverTimestamp(),
         success,
-        ...(failureReason !== undefined && { failureReason }),
+        ...(reason !== undefined && { reason }),
       });
     } catch (error) {
       console.error("Error logging login activity:", error);
@@ -5469,7 +5469,7 @@ export default function AdminDashboard() {
                       <table className="min-w-full border-collapse">
                         <thead className="bg-[#152238]">
                           <tr>
-                            {["User", "Status", "Timestamp", "Actions"].map(
+                            {["User", "Status", "Description", "Timestamp", "Actions"].map(
                               (header) => (
                                 <th
                                   key={header}
@@ -5521,11 +5521,11 @@ export default function AdminDashboard() {
                                   >
                                     {log.success ? "Success" : "Failed"}
                                   </span>
-                                  {!log.success && log.failureReason && (
-                                    <div className="text-xs text-gray-500 mt-1">
-                                      {log.failureReason}
+                                  </td>
+                                  <td>
+                                    <div className="text-sm text-black mt-1">
+                                      {log.reason}
                                     </div>
-                                  )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   {formatDateTime(log.timestamp)}
