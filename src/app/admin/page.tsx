@@ -293,78 +293,32 @@ interface User {
   displayName?: string | null;
 }
 
-// interface AdminDetails {
-//   id: string;
-//   name: string;
-//   email: string;
-//   unitNumber: string;
-//   position: string;
-//   adminPosition: string;
-// }
+interface ActivityLog {
+  id: string;
+  userId: string;
+  userName: string;
+  userType: "admin" | "member";
+  action: string;
+  description: string;
+  timestamp: Timestamp;
+  details?: Record<string, unknown>;
+}
 
-// interface PaymentData {
-//   memberId: string;
-//   amount: string;
-//   dueDate: string;
-//   type: string;
-//   status: string;
-// }
+interface LoginActivity {
+  id: string;
+  userId: string;
+  userName: string;
+  userType: "admin" | "member";
+  timestamp: Timestamp;
+  success: boolean;
+  failureReason?: string;
+}
 
-// interface FAQData {
-//   question: string;
-//   answer: string;
-// }
-
-// interface ServiceProviderData {
-//   name: string;
-//   role: string;
-//   phone: string;
-//   email: string;
-//   address: string;
-//   monthlySalary: string;
-//   joiningDate: string;
-//   isActive: boolean;
-//   documents: {
-//     aadhaar: string;
-//     pan: string;
-//     contract: string;
-//   };
-// }
-
-// interface VehicleData {
-//   type: string;
-//   model: string;
-//   numberPlate: string;
-//   parking: boolean;
-//   startDate: string;
-//   endDate: string;
-//   isCurrent: boolean;
-//   rcBookNumber: string;
-// }
-
-// interface CommitteeMemberData {
-//   name: string;
-//   email: string;
-//   phone: string;
-//   position: string;
-//   description: string;
-// }
-
-// interface AdminData {
-//   name: string;
-//   email: string;
-//   unitNumber: string;
-//   position: string;
-//   adminPosition: string;
-// }
-
-// interface DocumentData {
-//   title: string;
-//   description: string;
-//   file: File | null;
-//   category: "document" | "notice";
-//   isPublic: boolean;
-// }
+function removeUndefined<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined)
+  ) as Partial<T>;
+}
 
 interface TimestampLike {
   toDate?: () => Date;
@@ -688,6 +642,22 @@ const ServiceProviderIcon = () => (
   </svg>
 );
 
+const ActivityLogIcon = () => (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+    />
+  </svg>
+);
+
 // ==============================
 // UTILITY FUNCTIONS
 // ==============================
@@ -705,23 +675,18 @@ const formatDateTime = (timestamp: TimestampInput): string => {
       timestamp &&
       typeof (timestamp as Timestamp).toDate === "function"
     ) {
-      // Firestore Timestamp
       date = (timestamp as Timestamp).toDate();
     } else if (typeof timestamp === "string") {
-      // ISO string
       date = new Date(timestamp);
     } else if (typeof timestamp === "number") {
-      // Unix timestamp
       date = new Date(timestamp);
     } else if (timestamp && (timestamp as TimestampLike).seconds) {
-      // Firestore Timestamp with seconds property
       const ts = timestamp as TimestampLike;
       date = new Date((ts.seconds || 0) * 1000);
     } else {
       return "N/A";
     }
 
-    // Validate the date
     if (isNaN(date.getTime())) return "N/A";
 
     const day = date.getDate().toString().padStart(2, "0");
@@ -809,6 +774,7 @@ export default function AdminDashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminDetails, setAdminDetails] = useState<Admin | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [loggedSessions, setLoggedSessions] = useState<Set<string>>(new Set());
 
   // UI State
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -838,6 +804,8 @@ export default function AdminDashboard() {
   const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>(
     []
   );
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [loginHistory, setLoginHistory] = useState<LoginActivity[]>([]);
 
   // Filter States
   const [wingFilter, setWingFilter] = useState<string>("all");
@@ -863,6 +831,8 @@ export default function AdminDashboard() {
     useState<string>("all");
   const [redevelopmentStatusFilter, setRedevelopmentStatusFilter] =
     useState<string>("all");
+  const [activityTypeFilter, setActivityTypeFilter] = useState<string>("all");
+  const [activityUserFilter, setActivityUserFilter] = useState<string>("all");
 
   // Search States
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
@@ -1005,6 +975,8 @@ export default function AdminDashboard() {
   );
   const [selectedSuggestion, setSelectedSuggestion] =
     useState<Suggestion | null>(null);
+  const [selectedLogDetails, setSelectedLogDetails] =
+    useState<ActivityLog | null>(null);
 
   // Editing States
   const [editingFAQ, setEditingFAQ] = useState<FAQ | null>(null);
@@ -1100,6 +1072,8 @@ export default function AdminDashboard() {
         fetchVehicles(),
         fetchServiceProviders(),
         fetchComplaints(),
+        fetchActivityLogs(),
+        fetchLoginHistory(),
       ]);
 
       updateStats();
@@ -1515,8 +1489,36 @@ export default function AdminDashboard() {
     ) {
       try {
         const requestDocRef = doc(db, "deletionRequests", id);
+        const requestSnap = await getDoc(requestDocRef);
+
+        if (!requestSnap.exists()) {
+          console.error("Request not found!");
+          return;
+        }
+
+        const requestData = requestSnap.data() as DeletionRequest;
 
         await deleteDoc(requestDocRef);
+        fetchData();
+
+        await logActivity(
+          user?.uid || "system",
+          adminDetails?.name || "Admin",
+          "admin",
+          "delete_request",
+          `Permanently deleted deletion request [${id}] for ${requestData.itemType} "${requestData.itemName}" (Item ID: ${requestData.itemId}).`,
+          {
+            requestId: id,
+            itemType: requestData.itemType,
+            itemId: requestData.itemId,
+            itemName: requestData.itemName,
+            requestedBy: `${requestData.adminName} (${requestData.adminEmail})`,
+            reason: requestData.reason || "Not specified",
+            status: requestData.status,
+            reviewedBy: requestData.reviewedBy || "Not reviewed",
+            reviewedAt: requestData.reviewedAt || null,
+          }
+        );
 
         setDeletionRequests((currentRequests) =>
           currentRequests.filter((request) => request.id !== id)
@@ -1526,6 +1528,46 @@ export default function AdminDashboard() {
       } catch (error) {
         console.error("Error deleting request:", error);
       }
+    }
+  };
+
+  const fetchActivityLogs = async () => {
+    try {
+      const logsQuery = query(
+        collection(db, "activityLogs"),
+        orderBy("timestamp", "desc")
+      );
+      const logsSnapshot = await getDocs(logsQuery);
+      const logsData = logsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp,
+      })) as ActivityLog[];
+      setActivityLogs(logsData);
+      return logsData;
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      return [];
+    }
+  };
+
+  const fetchLoginHistory = async () => {
+    try {
+      const loginQuery = query(
+        collection(db, "loginHistory"),
+        orderBy("timestamp", "desc")
+      );
+      const loginSnapshot = await getDocs(loginQuery);
+      const loginData = loginSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp,
+      })) as LoginActivity[];
+      setLoginHistory(loginData);
+      return loginData;
+    } catch (error) {
+      console.error("Error fetching login history:", error);
+      return [];
     }
   };
 
@@ -1540,7 +1582,6 @@ export default function AdminDashboard() {
 
       const memberData = memberDoc.data() as Member;
 
-      // Fetch family members from subcollection
       const familyMembersSnapshot = await getDocs(
         collection(db, "members", memberId, "familyMembers")
       );
@@ -1549,7 +1590,6 @@ export default function AdminDashboard() {
         familyMembers.push({ id: doc.id, ...doc.data() } as FamilyMember);
       });
 
-      // Fetch vehicles from subcollection
       const vehiclesSnapshot = await getDocs(
         collection(db, "members", memberId, "vehicles")
       );
@@ -1558,7 +1598,6 @@ export default function AdminDashboard() {
         vehicles.push({ id: doc.id, ...doc.data() } as Vehicle);
       });
 
-      // Fetch tenants from subcollection
       const tenantsSnapshot = await getDocs(
         collection(db, "members", memberId, "tenants")
       );
@@ -1582,7 +1621,6 @@ export default function AdminDashboard() {
 
   const fetchTenantDetails = async (memberId: string) => {
     try {
-      // Fetch tenants from subcollection
       const tenantsSnapshot = await getDocs(
         collection(db, "members", memberId, "tenants")
       );
@@ -1614,7 +1652,6 @@ export default function AdminDashboard() {
       (s) => s.status === "pending"
     ).length;
 
-    // Calculate total unread messages across all complaints
     const totalUnread = Object.values(unreadMessageCounts).reduce(
       (sum, count) => sum + count,
       0
@@ -1641,22 +1678,92 @@ export default function AdminDashboard() {
   // Testimonial Functions
   const handleApproveTestimonial = async (id: string) => {
     try {
+      const testimonial = testimonials.find((t) => t.id === id);
+      if (!testimonial) {
+        console.error("Testimonial not found!");
+        return;
+      }
+
       await updateDoc(doc(db, "testimonials", id), {
         approved: true,
         updatedAt: serverTimestamp(),
       });
-      fetchData(); // Refresh data
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "approve_testimonial",
+        `Approved testimonial by ${testimonial.name} (Unit: ${testimonial.unit}, Rating: ${testimonial.rating})`,
+        {
+          testimonialId: id,
+          contentSnippet: testimonial.content.slice(0, 100),
+        }
+      );
+
+      fetchData();
     } catch (error) {
       console.error("Error approving testimonial:", error);
     }
   };
 
-  const handleDeleteTestimonial = (id: string) => {
+  const handleRejectTestimonial = async (id: string) => {
+    try {
+      const testimonial = testimonials.find((t) => t.id === id);
+      if (!testimonial) {
+        console.error("Testimonial not found!");
+        return;
+      }
+
+      await updateDoc(doc(db, "testimonials", id), {
+        approved: false,
+        rejected: true,
+        updatedAt: serverTimestamp(),
+      });
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "reject_testimonial",
+        `Rejected testimonial by ${testimonial.name} (Unit: ${testimonial.unit}, Rating: ${testimonial.rating})`,
+        {
+          testimonialId: id,
+          contentSnippet: testimonial.content.slice(0, 100),
+          rating: testimonial.rating,
+        }
+      );
+
+      fetchData();
+    } catch (error) {
+      console.error("Error rejecting testimonial:", error);
+    }
+  };
+
+  const handleDeleteTestimonial = async (id: string) => {
     const testimonial = testimonials.find((t) => t.id === id);
+    if (!testimonial) {
+      console.error("Testimonial not found!");
+      return;
+    }
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_testimonial",
+      `Deleted testimonial by ${testimonial.name} (Unit: ${testimonial.unit}, Rating: ${testimonial.rating})`,
+      {
+        testimonialId: id,
+        contentSnippet: testimonial.content.slice(0, 100),
+        rating: testimonial.rating,
+      }
+    );
+
     initiateDeletion(
       "testimonial",
       id,
-      `Testimonial by ${testimonial?.name || "Unknown"}`
+      `Testimonial by ${testimonial.name} (Unit: ${testimonial.unit})`
     );
   };
 
@@ -1666,11 +1773,24 @@ export default function AdminDashboard() {
     setIsAddingFAQ(true);
 
     try {
-      await addDoc(collection(db, "faqs"), {
+      const faqRef = await addDoc(collection(db, "faqs"), {
         question: newFAQ.question,
         answer: newFAQ.answer,
+        order: newFAQ.order,
         createdAt: serverTimestamp(),
       });
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "add_faq",
+        `Added new FAQ: "${newFAQ.question.substring(0, 50)}..."`,
+        {
+          faqId: faqRef.id,
+          answerSnippet: newFAQ.answer.substring(0, 100),
+        }
+      );
 
       setNewFAQ({
         id: "",
@@ -1706,6 +1826,18 @@ export default function AdminDashboard() {
         updatedAt: serverTimestamp(),
       });
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_faq",
+        `Updated FAQ: "${editingFAQ.question.substring(0, 50)}..."`,
+        {
+          faqId: editingFAQ.id,
+          answerSnippet: editingFAQ.answer.substring(0, 100),
+        }
+      );
+
       setEditingFAQ(null);
       setShowFAQPopup(false);
       alert("FAQ updated successfully!");
@@ -1715,8 +1847,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteFAQ = (id: string) => {
+  const handleDeleteFAQ = async (id: string) => {
     const faq = faqs.find((f) => f.id === id);
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_faq",
+      `Deleted FAQ: ${faq?.question.substring(0, 50) || "Unknown"}...`,
+      { faqId: id, answerSnippet: faq?.answer.substring(0, 100) }
+    );
+
     initiateDeletion(
       "faq",
       id,
@@ -1727,10 +1869,30 @@ export default function AdminDashboard() {
   // Query Functions
   const handleUpdateQueryStatus = async (id: string, status: string) => {
     try {
+      const queryItem = queries.find((q) => q.id === id);
+      if (!queryItem) {
+        console.error("Query not found!");
+        return;
+      }
+
       await updateDoc(doc(db, "queries", id), {
         status,
         updatedAt: serverTimestamp(),
       });
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_query_status",
+        `Updated query status to "${status}" for ${queryItem.name} (${queryItem.email})`,
+        {
+          queryId: id,
+          phone: queryItem.phone || "Not provided",
+          querySnippet: queryItem.query.substring(0, 100),
+        }
+      );
+
       fetchData();
     } catch (error) {
       console.error("Error updating query status:", error);
@@ -1744,8 +1906,26 @@ export default function AdminDashboard() {
     )}`;
   };
 
-  const handleDeleteQuery = (id: string) => {
+  const handleDeleteQuery = async (id: string) => {
     const queryItem = queries.find((q) => q.id === id);
+    if (!queryItem) {
+      console.error("Query not found!");
+      return;
+    }
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_query",
+      `Deleted query from ${queryItem.name} (${queryItem.email})`,
+      {
+        queryId: id,
+        phone: queryItem.phone || "Not provided",
+        querySnippet: queryItem.query.substring(0, 100),
+        status: queryItem.status,
+      }
+    );
     initiateDeletion(
       "query",
       id,
@@ -1783,6 +1963,15 @@ export default function AdminDashboard() {
         createdAt: serverTimestamp(),
       });
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "add_member",
+        `Added new member: ${newMember.name}`,
+        { member: newMember }
+      );
+
       setNewMember({
         name: "",
         email: "",
@@ -1812,8 +2001,25 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteMember = (id: string) => {
+  const handleDeleteMember = async (id: string) => {
     const member = members.find((m) => m.id === id);
+    if (!member) {
+      console.error("Member not found!");
+      return;
+    }
+    try {
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "delete_member",
+        `Deleted member: ${member?.name || "Unknown"}`,
+        { memberId: id, name: member.name }
+      );
+    } catch (error) {
+      console.error("Error adding to activity log:", error);
+      alert("Failed to update activity log");
+    }
     initiateDeletion("member", id, `Member: ${member?.name || "Unknown"}`);
   };
 
@@ -1851,7 +2057,6 @@ export default function AdminDashboard() {
     setIsAddingPayment(true);
 
     try {
-      // Get member document using UID
       const memberDoc = await getDoc(doc(db, "members", newPayment.memberId));
       if (!memberDoc.exists()) {
         alert("Member not found!");
@@ -1877,25 +2082,33 @@ export default function AdminDashboard() {
         }),
       };
 
-      // Use setDoc with merge: true to avoid overwriting existing payments
       const paymentDocRef = doc(db, "payments", newPayment.memberId);
 
-      // Get existing data first
       const existingDoc = await getDoc(paymentDocRef);
 
       if (existingDoc.exists()) {
-        // Update existing document by adding new payment
         await updateDoc(paymentDocRef, {
           [transactionId]: paymentData,
         });
       } else {
-        // Create new document
         await setDoc(paymentDocRef, {
           [transactionId]: paymentData,
         });
       }
 
-      // Reset form
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "add_payment",
+        `Added payment of ₹${paymentData.amount} (${paymentData.type}) for ${memberData.name} [Transaction ID: ${transactionId}]`,
+        {
+          memberId: memberData.id,
+          status: paymentData.status,
+          dueDate: paymentData.dueDate,
+        }
+      );
+
       setNewPayment({
         id: "",
         amount: 0,
@@ -1910,7 +2123,7 @@ export default function AdminDashboard() {
 
       setMemberSearchTerm("");
       setShowMemberDropdown(false);
-      fetchPayments(); // Refresh payments
+      fetchPayments();
       setShowAddPaymentPopup(false);
 
       alert(`Payment added successfully! Transaction ID: ${transactionId}`);
@@ -1941,14 +2154,39 @@ export default function AdminDashboard() {
       }
 
       await updateDoc(paymentDocRef, updateData);
+
+      const member = members.find((m) => m.id === memberId);
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_payment_status",
+        `Updated payment status to ${status} for transaction ${transactionId}`,
+        { memberId, memberName: member?.name || "Unknown Member", status }
+      );
+
       fetchData();
     } catch (error) {
       console.error("Error updating payment status:", error);
     }
   };
 
-  const handleDeletePayment = (memberId: string, transactionId: string) => {
+  const handleDeletePayment = async (
+    memberId: string,
+    transactionId: string
+  ) => {
     const member = members.find((m) => m.id === memberId);
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_payment",
+      `Deleted payment transaction: ${transactionId}`,
+      { memberId, memberName: member?.name || "Unknown Member" }
+    );
+
     initiateDeletion(
       "payment",
       `${memberId}_${transactionId}`,
@@ -1963,6 +2201,15 @@ export default function AdminDashboard() {
     status: string
   ) => {
     try {
+      const complaint = complaints.find(
+        (c) => c.id === complaintId && c.memberId === memberId
+      );
+
+      if (!complaint) {
+        console.error("Complaint not found!");
+        return;
+      }
+
       const complaintDocRef = doc(db, "complaints", memberId);
       const updatedAt = serverTimestamp();
 
@@ -1997,6 +2244,20 @@ export default function AdminDashboard() {
         }));
       }
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_complaint_status",
+        `Updated complaint status to "${status}" for ${complaint.memberName} [${complaint.title}]`,
+        {
+          memberId,
+          unitNumber: complaint.unitNumber,
+          complaintId,
+          type: complaint.type,
+        }
+      );
+
       alert(`Complaint status updated to ${status} successfully!`);
     } catch (error) {
       console.error("Error updating complaint status:", error);
@@ -2009,6 +2270,15 @@ export default function AdminDashboard() {
     complaintId: string
   ) => {
     try {
+      const complaint = complaints.find(
+        (c) => c.id === complaintId && c.memberId === memberId
+      );
+
+      if (!complaint) {
+        console.error("Complaint not found!");
+        return;
+      }
+
       const complaintRef = doc(db, "complaints", memberId);
       const updatedAt = serverTimestamp();
 
@@ -2034,6 +2304,20 @@ export default function AdminDashboard() {
         pendingComplaints: Math.max(0, prev.pendingComplaints - 1),
       }));
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "approve_complaint",
+        `Approved complaint "${complaint.title}" by ${complaint.memberName}`,
+        {
+          memberId,
+          unitNumber: complaint.unitNumber,
+          complaintId,
+          type: complaint.type,
+        }
+      );
+
       alert("Complaint approved and marked as in progress!");
     } catch (error) {
       console.error("Error approving complaint:", error);
@@ -2041,10 +2325,34 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteComplaint = (memberId: string, complaintId: string) => {
+  const handleDeleteComplaint = async (
+    memberId: string,
+    complaintId: string
+  ) => {
     const complaint = complaints.find(
       (c) => c.id === complaintId && c.memberId === memberId
     );
+
+    if (!complaint) {
+      console.error("Complaint not found!");
+      return;
+    }
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_complaint",
+      `Deleted complaint "${complaint.title}" by ${complaint.memberName}`,
+      {
+        memberId,
+        unitNumber: complaint.unitNumber,
+        complaintId,
+        type: complaint.type,
+        status: complaint.status,
+      }
+    );
+
     initiateDeletion(
       "complaint",
       `${memberId}_${complaintId}`,
@@ -2139,6 +2447,19 @@ export default function AdminDashboard() {
         rcBookNumber: "",
       });
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "add_vehicle",
+        `Added vehicle: ${newVehicle.model} (${newVehicle.numberPlate})`,
+        {
+          vehicle: newVehicle,
+          memberId: selectedVehicleMember?.id,
+          memberName: selectedVehicleMember?.name,
+        }
+      );
+
       setNewVehicleFiles([]);
 
       setShowAddVehiclePopup(false);
@@ -2179,8 +2500,24 @@ export default function AdminDashboard() {
 
       await updateDoc(vehicleRef, updateData);
 
-      fetchVehicles();
+      const memberRef = doc(db, "members", memberId);
+      const memberSnap = await getDoc(memberRef);
+      const memberName = memberSnap.exists()
+        ? memberSnap.data().name
+        : "Unknown";
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_vehicle_status",
+        `Updated vehicle status for ${memberName}’s vehicle to ${
+          isCurrent ? "current" : "past"
+        }`,
+        { MemberId: memberId, VehicleId: vehicleId, Name: memberName }
+      );
+
+      fetchVehicles();
       alert("Vehicle status updated successfully!");
     } catch (error) {
       console.error("Error updating vehicle status:", error);
@@ -2190,7 +2527,6 @@ export default function AdminDashboard() {
 
   const handleDeleteVehicle = async (memberId: string, vehicleId: string) => {
     try {
-      // Fetch the specific vehicle data
       const vehicleDoc = await getDoc(
         doc(db, "members", memberId, "vehicles", vehicleId)
       );
@@ -2198,6 +2534,15 @@ export default function AdminDashboard() {
       if (vehicleDoc.exists()) {
         const vehicleData = vehicleDoc.data();
         const member = members.find((m) => m.id === memberId);
+
+        await logActivity(
+          user?.uid || "system",
+          adminDetails?.name || "Admin",
+          "admin",
+          "delete_vehicle",
+          `Deleted vehicle: ${vehicleData.numberPlate || "Unknown Vehicle"}`,
+          { MemberId: memberId, VehicleId: vehicleId, Name: member?.name }
+        );
 
         initiateDeletion(
           "vehicle",
@@ -2244,6 +2589,15 @@ export default function AdminDashboard() {
           contract: "",
         },
       });
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "add_service_provider",
+        `Added service provider: ${newProvider.name} (${newProvider.role})`,
+        { provider: newProvider }
+      );
 
       setShowAddProviderPopup(false);
       fetchServiceProviders();
@@ -2295,6 +2649,15 @@ export default function AdminDashboard() {
         providerData
       );
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_service_provider",
+        `Updated service provider: ${newProvider.name}`,
+        { providerId: editingProvider.id }
+      );
+
       setEditingProvider(null);
       setShowAddProviderPopup(false);
       fetchServiceProviders();
@@ -2308,8 +2671,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteProvider = (id: string) => {
+  const handleDeleteProvider = async (id: string) => {
     const provider = serviceProviders.find((p) => p.id === id);
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_service_provider",
+      `Deleted service provider: ${provider?.name || "Unknown"}`,
+      { providerId: id }
+    );
+
     initiateDeletion(
       "serviceProvider",
       id,
@@ -2319,6 +2692,8 @@ export default function AdminDashboard() {
 
   const handleToggleProviderStatus = async (id: string, isActive: boolean) => {
     try {
+      const provider = serviceProviders.find((p) => p.id === id);
+
       const updateData: {
         isActive: boolean;
         updatedAt: FieldValue;
@@ -2333,6 +2708,15 @@ export default function AdminDashboard() {
       }
 
       await updateDoc(doc(db, "serviceProviders", id), updateData);
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "toggle_provider_status",
+        `${!isActive ? "Activated" : "Deactivated"} service provider`,
+        { providerId: id, newStatus: !isActive, providerName: provider?.name }
+      );
 
       fetchServiceProviders();
       alert(
@@ -2388,6 +2772,15 @@ export default function AdminDashboard() {
       setShowAddDocumentModal(false);
       fetchDocuments();
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "upload_document",
+        `Uploaded document: ${newDocument.title}`,
+        { document: newDocument }
+      );
+
       alert("Document uploaded successfully!");
     } catch (error) {
       console.error("Error uploading document:", error);
@@ -2400,6 +2793,16 @@ export default function AdminDashboard() {
       await updateDoc(doc(db, "documents", docId), {
         isPublic: !isPublic,
       });
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "toggle_document_visibility",
+        `Made document ${!isPublic ? "public" : "private"}`,
+        { docId, isPublic: !isPublic }
+      );
+
       fetchDocuments();
       alert(
         `Document visibility ${!isPublic ? "made public" : "set to private"}!`
@@ -2410,8 +2813,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteDocument = (docId: string) => {
+  const handleDeleteDocument = async (docId: string) => {
     const document = documents.find((d) => d.id === docId);
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_document",
+      `Deleted document: ${document?.title || "Unknown"}`,
+      { docId }
+    );
+
     initiateDeletion(
       "document",
       docId,
@@ -2441,6 +2854,15 @@ export default function AdminDashboard() {
         position: "",
         description: "",
       });
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "add_committee_member",
+        `Added committee member: ${newCommitteeMember.name}`,
+        { committeeMember: newCommitteeMember }
+      );
 
       setShowAddCommitteePopup(false);
       fetchCommitteeMembers();
@@ -2482,6 +2904,18 @@ export default function AdminDashboard() {
         updatedAt: serverTimestamp(),
       });
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_committee_member",
+        `Updated committee member ${newCommitteeMember.name}`,
+        {
+          memberId: editingCommitteeMember.id,
+          ...newCommitteeMember,
+        }
+      );
+
       setEditingCommitteeMember(null);
       setShowAddCommitteePopup(false);
       fetchCommitteeMembers();
@@ -2495,8 +2929,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteCommitteeMember = (id: string) => {
+  const handleDeleteCommitteeMember = async (id: string) => {
     const member = committeeMembers.find((m) => m.id === id);
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_committee_member",
+      `Deleted committee member ${member?.name || "Unknown"}`,
+      { memberId: id, memberName: member?.name || "Unknown" }
+    );
+
     initiateDeletion(
       "committee",
       id,
@@ -2542,6 +2986,15 @@ export default function AdminDashboard() {
         adminPosition: "",
       });
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "add_admin",
+        `Added new admin: ${newAdmin.name}`,
+        { admin: newAdmin }
+      );
+
       setShowAddAdminPopup(false);
       fetchAdmins();
 
@@ -2584,6 +3037,19 @@ export default function AdminDashboard() {
         adminPosition: newAdmin.adminPosition,
       });
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_admin",
+        `Updated admin ${newAdmin.name || "Unknown"}`,
+        {
+          adminId: editingAdmin.id,
+          oldData: editingAdmin,
+          newData: newAdmin,
+        }
+      );
+
       setEditingAdmin(null);
       setShowAddAdminPopup(false);
       fetchAdmins();
@@ -2597,8 +3063,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteAdmin = (id: string) => {
+  const handleDeleteAdmin = async (id: string) => {
     const admin = admins.find((a) => a.id === id);
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_admin",
+      `Deleted admin ${admin?.name || "Unknown"}`,
+      { adminId: id, adminName: admin?.name || "Unknown" }
+    );
+
     initiateDeletion("admin", id, `Admin: ${admin?.name || "Unknown"}`);
   };
 
@@ -2613,7 +3089,13 @@ export default function AdminDashboard() {
       return;
     }
     try {
+      const suggestion = suggestions.find((s) => s.id === suggestionId);
       const suggestionRef = doc(db, "suggestions", suggestionId);
+
+      if (!suggestion) {
+        alert("Suggestion not found");
+        return;
+      }
 
       const updateData: {
         status: Suggestion["status"];
@@ -2642,6 +3124,17 @@ export default function AdminDashboard() {
         await updateDoc(suggestionRef, updateData);
       }
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "update_suggestion_status",
+        `Updated suggestion status to ${status}`,
+        { suggestionId,
+          suggestionTitle: suggestion.title,
+          comment }
+      );
+
       fetchSuggestions();
       setShowSuggestionModal(false);
       setSuggestionComment("");
@@ -2653,8 +3146,25 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteSuggestion = (id: string) => {
+  const handleDeleteSuggestion = async (id: string) => {
     const suggestion = suggestions.find((s) => s.id === id);
+
+    if (!suggestion) {
+      alert("Suggestion not found");
+      return;
+    }
+
+    await logActivity(
+      user?.uid || "system",
+      adminDetails?.name || "Admin",
+      "admin",
+      "delete_suggestion",
+      `Deleted suggestion: ${suggestion.title || "Unknown"}`,
+      { suggestionId: id,
+        suggestionTitle: suggestion.title
+      }
+    );
+
     initiateDeletion(
       "suggestion",
       id,
@@ -2673,34 +3183,65 @@ export default function AdminDashboard() {
       alert("User information not available");
       return;
     }
+
     try {
-      if (!formNotes.trim()) {
-        alert("Please add a comment before updating the status");
+      if (!formNotes.trim() && !status) {
+        alert("Please add a comment or select a status");
         return;
       }
 
-      await addDoc(collection(db, "redevelopmentForms", formId, "comments"), {
-        userId: user?.uid,
-        userName: adminDetails?.name || "Admin",
-        userType: "admin",
-        comment: formNotes,
-        timestamp: serverTimestamp(),
-        statusChange: status,
-      });
+      // --- Add comment if provided ---
+      if (formNotes.trim()) {
+        await addDoc(collection(db, "redevelopmentForms", formId, "comments"), {
+          userId: user?.uid,
+          userName: adminDetails?.name || "Admin",
+          userType: "admin",
+          comment: formNotes,
+          timestamp: serverTimestamp(),
+          statusChange: status || null,
+        });
 
-      await updateDoc(doc(db, "redevelopmentForms", formId), {
-        status,
-        reviewedAt: serverTimestamp(),
-        reviewedBy: adminDetails?.name || "Admin",
-      });
+        //  Log the comment action
+        await logActivity(
+          user?.uid || "system",
+          adminDetails?.name || "Admin",
+          "admin",
+          "add_comment",
+          `Added a comment to redevelopment form`,
+          { formId, comment: formNotes }
+        );
+      }
+
+      // --- Update form status if provided ---
+      if (status) {
+        await updateDoc(doc(db, "redevelopmentForms", formId), {
+          status,
+          reviewedAt: serverTimestamp(),
+          reviewedBy: adminDetails?.name || "Admin",
+        });
+
+        //  Log the status change action
+        await logActivity(
+          user?.uid || "system",
+          adminDetails?.name || "Admin",
+          "admin",
+          "update_form_status",
+          `Updated redevelopment form status to ${status}`,
+          { formId, status, notes: formNotes }
+        );
+      }
 
       fetchRedevelopmentForms();
       setShowFormModal(false);
       setFormNotes("");
-      alert(`Form status updated to ${status}`);
+      alert(
+        status
+          ? `Form status updated to ${status}`
+          : "Comment added successfully"
+      );
     } catch (error) {
-      console.error("Error updating form status:", error);
-      alert("Failed to update form status");
+      console.error("Error updating form status or adding comment:", error);
+      alert("Failed to update form");
     }
   };
 
@@ -2745,6 +3286,18 @@ export default function AdminDashboard() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "export_forms",
+        `Exported ${redevelopmentForms.length} redevelopment forms to CSV`,
+        {
+          count: redevelopmentForms.length,
+          exportedAt: new Date().toISOString(),
+        }
+      );
 
       alert("Forms exported successfully!");
     } catch (error) {
@@ -2819,6 +3372,15 @@ export default function AdminDashboard() {
         createdAt: serverTimestamp(),
       });
 
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "request_deletion",
+        `Requested deletion of ${itemType}: ${itemName}`,
+        { itemType, itemId, itemName, reason }
+      );
+
       alert("Deletion request submitted for Super Admin approval.");
     } catch (error) {
       console.error("Error creating deletion request:", error);
@@ -2844,80 +3406,51 @@ export default function AdminDashboard() {
     setPendingDeletion(null);
   };
 
-  // const handleDeletionRequest = async (requestId: string, approve: boolean) => {
-  //   try {
-  //     const requestRef = doc(db, "deletionRequests", requestId);
-  //     const requestDoc = await getDoc(requestRef);
-  //     const requestData = requestDoc.data() as DeletionRequest;
+  const logActivity = async (
+    userId: string,
+    userName: string,
+    userType: "admin" | "member" | "system",
+    action: string,
+    description: string,
+    details?: Record<string, unknown>
+  ) => {
+    try {
+      await addDoc(collection(db, "activityLogs"), {
+        userId,
+        userName,
+        userType,
+        action,
+        description,
+        timestamp: serverTimestamp(),
+        ...(details !== undefined && { details }),
+      });
+    } catch (error) {
+      console.error("Error logging activity:", error);
+    }
+  };
 
-  //     if (approve) {
-  //       switch (requestData.itemType) {
-  //         case "member":
-  //           await deleteDoc(doc(db, "members", requestData.itemId));
-  //           break;
-  //         case "testimonial":
-  //           await deleteDoc(doc(db, "testimonials", requestData.itemId));
-  //           break;
-  //         case "faq":
-  //           await deleteDoc(doc(db, "faqs", requestData.itemId));
-  //           break;
-  //         case "payment":
-  //           const [memberId, transactionId] = requestId.split("_");
-  //           const paymentRef = doc(db, "payments", memberId);
-
-  //           const paymentDoc = await getDoc(paymentRef);
-
-  //           if (paymentDoc.exists()) {
-  //             const paymentData = paymentDoc.data();
-
-  //             if (paymentData && paymentData[transactionId]) {
-  //               const updatedData = { ...paymentData };
-  //               delete updatedData[transactionId];
-
-  //               await setDoc(paymentRef, updatedData);
-  //             }
-  //           }
-  //           break;
-  //         case "vehicle":
-  //           const [mId, vehicleId] = requestId.split("_");
-
-  //           await deleteDoc(doc(db, "members", mId, "vehicles", vehicleId));
-  //           break;
-  //         case "committee":
-  //           await deleteDoc(doc(db, "committee", requestData.itemId));
-  //           break;
-  //         case "admin":
-  //           await deleteDoc(doc(db, "admins", requestData.itemId));
-  //           break;
-  //         case "serviceProvider":
-  //           await deleteDoc(doc(db, "serviceProviders", requestData.itemId));
-  //           break;
-  //         case "document":
-  //           await deleteDoc(doc(db, "documents", requestData.itemId));
-  //           break;
-  //       }
-  //     }
-
-  //     await updateDoc(requestRef, {
-  //       status: approve ? "approved" : "rejected",
-  //       reviewedBy: adminDetails?.name,
-  //       reviewedAt: serverTimestamp(),
-  //     });
-
-  //     fetchDeletionRequests();
-  //     fetchData();
-
-  //     alert(
-  //       `Deletion request ${approve ? "approved" : "rejected"} successfully!`
-  //     );
-  //   } catch (error) {
-  //     console.error("Error handling deletion request:", error);
-  //     alert("Failed to process deletion request. Please try again.");
-  //   }
-  // };
+  const logLoginActivity = async (
+    userId: string,
+    userName: string,
+    userType: "admin" | "member" | "system",
+    success: boolean,
+    failureReason?: string
+  ) => {
+    try {
+      await addDoc(collection(db, "loginHistory"), {
+        userId,
+        userName,
+        userType,
+        timestamp: serverTimestamp(),
+        success,
+        ...(failureReason !== undefined && { failureReason }),
+      });
+    } catch (error) {
+      console.error("Error logging login activity:", error);
+    }
+  };
 
   // Deletion approval Functions
-
   const handleDeletionRequest = async (requestId: string, approve: boolean) => {
     if (!adminDetails) {
       alert("Admin details not available");
@@ -3022,18 +3555,26 @@ export default function AdminDashboard() {
             return;
         }
 
-        // Refresh the data after deletion
         fetchData();
       }
 
-      // Update the deletion request status
       await updateDoc(requestRef, {
         status: approve ? "approved" : "rejected",
         reviewedBy: adminDetails?.name,
         reviewedAt: serverTimestamp(),
       });
 
-      // Refresh deletion requests list
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        approve ? "approve_deletion" : "reject_deletion",
+        `${approve ? "Approved" : "Rejected"} deletion request for ${
+          requestData.itemName
+        }`,
+        { requestId, itemType: requestData.itemType, approve }
+      );
+
       fetchDeletionRequests();
 
       alert(
@@ -3054,7 +3595,7 @@ export default function AdminDashboard() {
   ) => {
     if (isSuperAdmin) {
       if (confirm(`Are you sure you want to delete ${itemName}?`)) {
-        handleDirectDeletion(itemType, itemId);
+        handleDirectDeletion(itemType, itemId, itemName);
       }
     } else {
       setPendingDeletion({ itemType, itemId, itemName });
@@ -3062,7 +3603,11 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDirectDeletion = async (itemType: string, itemId: string) => {
+  const handleDirectDeletion = async (
+    itemType: string,
+    itemId: string,
+    itemName: string
+  ) => {
     try {
       switch (itemType) {
         case "testimonial":
@@ -3146,6 +3691,26 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleActivityLogsDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "activityLogs", id));
+      console.log("Log deleted:", id);
+      setActivityLogs((prevLogs) => prevLogs.filter((log) => log.id !== id));
+    } catch (error) {
+      console.error("Error deleting log:", error);
+    }
+  };
+
+  const handleLoginHistoryDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "loginHistory", id));
+      console.log("Log deleted:", id);
+      setActivityLogs((prevLogs) => prevLogs.filter((log) => log.id !== id));
+    } catch (error) {
+      console.error("Error deleting log:", error);
+    }
+  };
+
   // Chat Functions
 
   // ==============================
@@ -3176,7 +3741,6 @@ export default function AdminDashboard() {
           const snapshot = await getDocs(q);
           const unreadMessages = snapshot.docs.filter((doc) => {
             const messageData = doc.data() as ChatMessage;
-            // Count messages from members that haven't been read by current admin
             return (
               messageData.sender === "member" &&
               (!messageData.readBy || !messageData.readBy.includes(user.uid))
@@ -3385,6 +3949,15 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
+      await logActivity(
+        user?.uid || "system",
+        adminDetails?.name || "Admin",
+        "admin",
+        "logout",
+        `Admin logged out`,
+        { email: user?.email }
+      );
+
       await signOut(auth);
       router.push("/");
     } catch (error) {
@@ -3405,6 +3978,11 @@ export default function AdminDashboard() {
           const docRef = doc(db, "admins", firebaseUser.uid);
           const docSnap = await getDoc(docRef);
 
+          const lastSignIn = firebaseUser.metadata.lastSignInTime
+            ? new Date(firebaseUser.metadata.lastSignInTime).getTime()
+            : Date.now();
+          const sessionKey = `login_${firebaseUser.uid}_${lastSignIn}`;
+
           if (docSnap.exists()) {
             const data = docSnap.data();
             setUser(firebaseUser);
@@ -3417,21 +3995,82 @@ export default function AdminDashboard() {
               adminPosition: data.adminPosition || "",
             });
             setIsAdmin(true);
-            setLoading(false); // Move this here
-            await fetchData(); // Fetch data after successful auth
-          } else {
-            setIsAdmin(false);
             setLoading(false);
-            router.push("/");
+
+            if (!localStorage.getItem(sessionKey)) {
+              await logLoginActivity(
+                firebaseUser.uid,
+                data.name || "Admin",
+                "admin",
+                true,
+                `Admin logged in successfully`
+              );
+              localStorage.setItem(sessionKey, "true");
+            }
+
+            await fetchData();
+          } else {
+            const memberDocRef = doc(db, "members", firebaseUser.uid);
+            const memberDocSnap = await getDoc(memberDocRef);
+
+            if (memberDocSnap.exists()) {
+              const memberData = memberDocSnap.data();
+              setUser(firebaseUser);
+              setIsAdmin(false);
+              setLoading(false);
+
+              if (!localStorage.getItem(sessionKey)) {
+                await logLoginActivity(
+                  firebaseUser.uid,
+                  memberData.name || "",
+                  "member",
+                  true
+                );
+                localStorage.setItem(sessionKey, "true");
+              }
+            } else {
+              setIsAdmin(false);
+              setLoading(false);
+
+              if (!localStorage.getItem(sessionKey)) {
+                await logLoginActivity(
+                  firebaseUser.uid,
+                  "Unknown",
+                  "system",
+                  false,
+                  "User not found in admin or member records"
+                );
+                localStorage.setItem(sessionKey, "true");
+              }
+
+              router.push("/");
+            }
           }
         } catch (err) {
+          const error = err as FirebaseError;
           console.error("Error checking admin:", err);
           setIsAdmin(false);
           setLoading(false);
+
+          const lastSignIn = firebaseUser.metadata.lastSignInTime
+            ? new Date(firebaseUser.metadata.lastSignInTime).getTime()
+            : Date.now();
+          const sessionKey = `login_${firebaseUser.uid}_${lastSignIn}`;
+
+          if (firebaseUser && !localStorage.getItem(sessionKey)) {
+            await logLoginActivity(
+              firebaseUser.uid,
+              "Unknown",
+              "system",
+              false,
+              error.message
+            );
+            localStorage.setItem(sessionKey, "true");
+          }
+
           router.push("/");
         }
       } else {
-        // Not logged in
         setUser(null);
         setIsAdmin(false);
         setLoading(false);
@@ -3447,6 +4086,48 @@ export default function AdminDashboard() {
       fetchDeletionRequests();
     }
   }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const logsQuery = query(
+      collection(db, "activityLogs"),
+      orderBy("timestamp", "desc")
+    );
+
+    const unsubscribe = onSnapshot(logsQuery, (snapshot) => {
+      const logsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp,
+      })) as ActivityLog[];
+
+      setActivityLogs(logsData);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const loginQuery = query(
+      collection(db, "loginHistory"),
+      orderBy("timestamp", "desc")
+    );
+
+    const unsubscribe = onSnapshot(loginQuery, (snapshot) => {
+      const loginData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp,
+      })) as LoginActivity[];
+
+      setLoginHistory(loginData);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     let filtered = payments;
@@ -3529,22 +4210,21 @@ export default function AdminDashboard() {
       return matchesWing && matchesFlat;
     });
 
-    const uniqueVehicleWings = Array.from(
-      new Set(
-        vehicles.map((vehicle: VehicleWithMemberInfo) =>
-          extractWingFromUnit(vehicle.memberUnit)
-        )
+  const uniqueVehicleWings = Array.from(
+    new Set(
+      vehicles.map((vehicle: VehicleWithMemberInfo) =>
+        extractWingFromUnit(vehicle.memberUnit)
       )
-    ).filter((wing) => wing !== "");
+    )
+  ).filter((wing) => wing !== "");
 
-    const uniqueVehicleFlats = Array.from(
-      new Set(
-        vehicles.map((vehicle: VehicleWithMemberInfo) =>
-          extractFlatFromUnit(vehicle.memberUnit)
-        )
+  const uniqueVehicleFlats = Array.from(
+    new Set(
+      vehicles.map((vehicle: VehicleWithMemberInfo) =>
+        extractFlatFromUnit(vehicle.memberUnit)
       )
-    ).filter((flat) => flat !== "");
-
+    )
+  ).filter((flat) => flat !== "");
 
   const filteredForms = redevelopmentForms.filter((form) => {
     const matchesSearch =
@@ -3955,6 +4635,20 @@ export default function AdminDashboard() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => {
+                setActiveTab("activityLogs");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                activeTab === "activityLogs"
+                  ? "bg-blue-200 text-black shadow-md"
+                  : "text-blue-100 hover:bg-blue-200 hover:text-black"
+              }`}
+            >
+              <ActivityLogIcon />
+              <span className="ml-3">Activity Logs</span>
+            </button>
           </nav>
         </div>
 
@@ -4117,6 +4811,7 @@ export default function AdminDashboard() {
                   {activeTab === "documents" && "Document Management"}
                   {activeTab === "suggestions" && "Suggestions Box"}
                   {activeTab === "deletionRequests" && "Deletion Requests"}
+                  {activeTab === "activityLogs" && "Activity Logs"}
                 </h2>
                 <div className="h-1 w-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mt-2"></div>
               </div>
@@ -4479,6 +5174,435 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </>
+          )}
+
+          {activeTab === "activityLogs" && (
+            <div className="bg-white shadow-sm overflow-hidden rounded-xl">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-xl font-semibold text-gray-800">
+                  Activity Logs
+                </h3>
+                <p className="text-sm text-gray-500">
+                  View system activity and login history
+                </p>
+              </div>
+
+              {/* Filter Section */}
+              <div className="p-6 border-b border-gray-100 bg-gray-50">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Filter by Type
+                    </label>
+                    <select
+                      value={activityTypeFilter}
+                      onChange={(e) => setActivityTypeFilter(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
+                    >
+                      <option value="all">All Activities</option>
+                      <option value="login">Login History</option>
+                      <option value="activity">Activity Logs</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Filter by User
+                    </label>
+                    <select
+                      value={activityUserFilter}
+                      onChange={(e) => setActivityUserFilter(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
+                    >
+                      <option value="all">All Users</option>
+                      <option value="admin">Admins Only</option>
+                      <option value="member">Members Only</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => {
+                        setActivityTypeFilter("all");
+                        setActivityUserFilter("all");
+                      }}
+                      className="px-5 py-2.5 cursor-pointer bg-white text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 border border-gray-200 shadow-sm flex items-center gap-2"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                      Clear Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabs for Activity Types */}
+              <div className="border-b border-gray-200">
+                <nav className="flex -mb-px">
+                  <button
+                    onClick={() => setActivityTypeFilter("activity")}
+                    className={`cursor-pointer py-4 px-6 text-sm font-medium border-b-2 ${
+                      activityTypeFilter === "activity" ||
+                      activityTypeFilter === "all"
+                        ? "border-blue-500 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    Activity Logs
+                  </button>
+                  <button
+                    onClick={() => setActivityTypeFilter("login")}
+                    className={`cursor-pointer py-4 px-6 text-sm font-medium border-b-2 ${
+                      activityTypeFilter === "login" ||
+                      activityTypeFilter === "all"
+                        ? "border-blue-500 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    Login History
+                  </button>
+                </nav>
+              </div>
+
+              {/* Activity Logs Table */}
+              {(activityTypeFilter === "all" ||
+                activityTypeFilter === "activity") && (
+                <div className="p-6">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                    Activity Logs
+                  </h4>
+                  <div className="shadow-xl overflow-hidden border border-gray-200 bg-white rounded-lg">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border-collapse">
+                        <thead className="bg-[#152238]">
+                          <tr>
+                            {[
+                              "User",
+                              "Action",
+                              "Description",
+                              "Details",
+                              "Timestamp",
+                              "Actions",
+                            ].map((header) => (
+                              <th
+                                key={header}
+                                scope="col"
+                                className="px-6 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider"
+                              >
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                          {activityLogs
+                            .filter(
+                              (log) =>
+                                activityUserFilter === "all" ||
+                                log.userType === activityUserFilter
+                            )
+                            .map((log) => (
+                              <tr
+                                key={log.id}
+                                className="hover:bg-blue-50/30 transition-colors duration-150 group"
+                              >
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                      <span className="font-medium text-blue-700">
+                                        {log.userName.charAt(0)}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm font-medium text-gray-900">
+                                        {log.userName}
+                                      </div>
+                                      <div className="text-sm text-gray-500 capitalize">
+                                        {log.userType}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+                                    {log.action.replace("_", " ")}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="text-sm text-gray-700 max-w-xs">
+                                    {log.description}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  {log.details ? (
+                                    <>
+                                      <button
+                                        onClick={() =>
+                                          setSelectedLogDetails(log)
+                                        }
+                                        className=" cursor-pointer flex items-center text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded"
+                                      >
+                                        View Details
+                                        <svg
+                                          className="w-4 h-4 ml-1"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M19 9l-7 7-7-7"
+                                          />
+                                        </svg>
+                                      </button>
+
+                                      {/* Details Modal */}
+                                      {selectedLogDetails?.id === log.id && (
+                                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-lg p-4">
+                                          <div className="bg-white shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-2xl">
+                                            {/* Header */}
+                                            <div className="bg-gradient-to-r from-[#152238] via-[#1b2a41] to-[#243b55] p-6 text-white sticky top-0 z-10 rounded-t-2xl">
+                                              <div className="flex justify-between items-start">
+                                                <div>
+                                                  <h2 className="text-2xl font-bold">
+                                                    Activity Details
+                                                  </h2>
+                                                  <div className="mt-3 flex flex-wrap gap-2">
+                                                    <span className="inline-block text-xs font-medium bg-white/20 px-3 py-1.5 rounded-full">
+                                                      User: {log.userName}
+                                                    </span>
+                                                    <span className="inline-block text-xs font-medium bg-white/20 px-3 py-1.5 rounded-full">
+                                                      Timestamp:{" "}
+                                                      {formatDateTime(
+                                                        log.timestamp
+                                                      )}
+                                                    </span>
+                                                    <span className="inline-block text-xs font-medium bg-white/20 px-3 py-1.5 rounded-full">
+                                                      {
+                                                        Object.keys(log.details)
+                                                          .length
+                                                      }{" "}
+                                                      {Object.keys(log.details)
+                                                        .length === 1
+                                                        ? "item"
+                                                        : "items"}
+                                                    </span>
+                                                  </div>
+                                                </div>
+
+                                                <button
+                                                  onClick={() =>
+                                                    setSelectedLogDetails(null)
+                                                  }
+                                                  className="text-white/80 hover:text-white text-2xl cursor-pointer"
+                                                >
+                                                  ✕
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            {/* Content */}
+                                            <div className="p-6 sm:p-8 space-y-6">
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                {Object.entries(
+                                                  log.details
+                                                ).map(([key, value]) => (
+                                                  <div
+                                                    key={key}
+                                                    className="bg-white border border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-shadow"
+                                                  >
+                                                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center">
+                                                      <svg
+                                                        className="w-4 h-4 mr-1.5 text-blue-500"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                      >
+                                                        <path
+                                                          strokeLinecap="round"
+                                                          strokeLinejoin="round"
+                                                          strokeWidth={2}
+                                                          d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"
+                                                        />
+                                                      </svg>
+                                                      {key.replace(/_/g, " ")}
+                                                    </div>
+                                                    <div className="text-sm text-gray-800 break-words p-2 bg-gray-50 rounded-md min-h-10">
+                                                      {String(value) || (
+                                                        <span className="text-gray-400 italic">
+                                                          Empty value
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-gray-400 text-sm italic">
+                                      No details
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {formatDateTime(log.timestamp)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                  <button
+                                    onClick={() =>
+                                      handleActivityLogsDelete(log.id)
+                                    }
+                                    className="text-red-600 hover:text-red-900 cursor-pointer"
+                                  >
+                                    Delete
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+
+                      {activityLogs.length === 0 && (
+                        <div className="p-12 text-center">
+                          <div className="mx-auto text-black w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                            <ActivityLogIcon />
+                          </div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-1">
+                            No activity logs found
+                          </h3>
+                          <p className="text-gray-500 max-w-md mx-auto">
+                            System activities will appear here
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Login History Table */}
+              {(activityTypeFilter === "all" ||
+                activityTypeFilter === "login") && (
+                <div className="p-6">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                    Login History
+                  </h4>
+                  <div className="shadow-xl overflow-hidden border border-gray-200 bg-white rounded-lg">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border-collapse">
+                        <thead className="bg-[#152238]">
+                          <tr>
+                            {["User", "Status", "Timestamp", "Actions"].map(
+                              (header) => (
+                                <th
+                                  key={header}
+                                  scope="col"
+                                  className="px-6 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider"
+                                >
+                                  {header}
+                                </th>
+                              )
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                          {loginHistory
+                            .filter(
+                              (log) =>
+                                activityUserFilter === "all" ||
+                                log.userType === activityUserFilter
+                            )
+                            .map((log) => (
+                              <tr
+                                key={log.id}
+                                className="hover:bg-blue-50/30 transition-colors duration-150 group"
+                              >
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                      <span className="font-medium text-blue-700">
+                                        {log.userName.charAt(0)}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm font-medium text-gray-900">
+                                        {log.userName}
+                                      </div>
+                                      <div className="text-sm text-gray-500 capitalize">
+                                        {log.userType}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span
+                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                      log.success
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-red-100 text-red-800"
+                                    }`}
+                                  >
+                                    {log.success ? "Success" : "Failed"}
+                                  </span>
+                                  {!log.success && log.failureReason && (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      {log.failureReason}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {formatDateTime(log.timestamp)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                  <button
+                                    onClick={() =>
+                                      handleLoginHistoryDelete(log.id)
+                                    }
+                                    className="text-red-600 hover:text-red-900 cursor-pointer"
+                                  >
+                                    Delete
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+
+                      {loginHistory.length === 0 && (
+                        <div className="p-12 text-center">
+                          <div className="mx-auto text-black w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                            <ActivityLogIcon />
+                          </div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-1">
+                            No login history found
+                          </h3>
+                          <p className="text-gray-500 max-w-md mx-auto">
+                            Login activities will appear here
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === "committeeMembers" && (
@@ -6781,6 +7905,17 @@ export default function AdminDashboard() {
                                     Approve
                                   </button>
                                 )}
+
+                                {!testimonial.approved && (
+                                  <button
+                                    onClick={() =>
+                                      handleRejectTestimonial(testimonial.id)
+                                    }
+                                    className="text-green-600 hover:text-green-900 text-left cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                )}
                                 <button
                                   onClick={() =>
                                     handleDeleteTestimonial(testimonial.id)
@@ -8490,9 +9625,9 @@ export default function AdminDashboard() {
               </div>
 
               {/* Complaints Table */}
-            <div className="shadow-xl overflow-hidden border border-gray-200 bg-white"> 
-              <div className="overflow-x-auto"> 
-                <table className="min-w-full border-collapse">
+              <div className="shadow-xl overflow-hidden border border-gray-200 bg-white">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse">
                     <thead className="bg-[#152238]">
                       <tr>
                         {[
