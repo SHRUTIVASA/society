@@ -352,11 +352,11 @@ export default function Home() {
   };
 
   const imageSlides = [
-    "${IMAGE_BASE_PATH}/assets/s1.jpg",
-    "${IMAGE_BASE_PATH}/assets/s2.jpg",
-    "${IMAGE_BASE_PATH}/assets/s3.jpg",
-    "${IMAGE_BASE_PATH}/assets/s4.jpg",
-    "${IMAGE_BASE_PATH}/assets/s5.jpg",
+    `${IMAGE_BASE_PATH}/assets/s1.jpg`,
+    `${IMAGE_BASE_PATH}/assets/s2.jpg`,
+    `${IMAGE_BASE_PATH}/assets/s3.jpg`,
+    `${IMAGE_BASE_PATH}/assets/s4.jpg`,
+    `${IMAGE_BASE_PATH}/assets/s5.jpg`,
   ];
 
   const notices = [
