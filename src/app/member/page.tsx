@@ -1192,7 +1192,7 @@ export default function MemberDashboard() {
                 email: currentUser.email,
                 displayName: currentUser.displayName,
               };
-              setUser(userObj); 
+              setUser(userObj);
 
               if (!localStorage.getItem(sessionKey)) {
                 await logLoginActivity(
@@ -1217,7 +1217,7 @@ export default function MemberDashboard() {
                 );
                 localStorage.setItem(sessionKey, "true");
               }
-              await signOut(auth); 
+              await signOut(auth);
               router.push("/");
             }
           } catch (error) {
@@ -1631,7 +1631,7 @@ export default function MemberDashboard() {
       const hasUpvoted = currentVotes.voters.includes(`${user.uid}_upvote`);
       const hasDownvoted = currentVotes.voters.includes(`${user.uid}_downvote`);
 
-      let newVotes = { ...currentVotes };
+      const newVotes = { ...currentVotes };
 
       if (voteType === "upvote") {
         if (hasUpvoted) {
@@ -2166,7 +2166,7 @@ export default function MemberDashboard() {
     setUploadProgress(0);
 
     try {
-      let fileUrls: string[] = [];
+      const fileUrls: string[] = [];
       if (redevelopmentForm.files.length > 0) {
         for (let i = 0; i < redevelopmentForm.files.length; i++) {
           setUploadProgress((i / redevelopmentForm.files.length) * 100);
@@ -4767,13 +4767,14 @@ export default function MemberDashboard() {
                             {vehicle.isCurrent ? (
                               <button
                                 onClick={() => {
+                                  if (!vehicle.id) return;
                                   const endDate = prompt(
                                     "Enter end date (YYYY-MM-DD):",
                                     new Date().toISOString().split("T")[0]
                                   );
                                   if (endDate) {
                                     handleUpdateVehicleStatus(
-                                      vehicle.id!,
+                                      vehicle.id,
                                       false,
                                       endDate
                                     );
@@ -4786,7 +4787,8 @@ export default function MemberDashboard() {
                             ) : (
                               <button
                                 onClick={() =>
-                                  handleUpdateVehicleStatus(vehicle.id!, true)
+                                  vehicle.id &&
+                                  handleUpdateVehicleStatus(vehicle.id, true)
                                 }
                                 className="text-blue-600 hover:text-blue-900 mr-3 cursor-pointer"
                               >
