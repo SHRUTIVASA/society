@@ -699,6 +699,8 @@ export default function MemberDashboard() {
   const [sortBy, setSortBy] = useState("newest");
   const [searchTerm, setSearchTerm] = useState("");
 
+  const IMAGE_BASE_PATH = "/society";
+
   // Function to handle edit button click
   const handleEditForm = (form: RedevelopmentForm) => {
     setEditingForm(form);
@@ -2839,7 +2841,7 @@ export default function MemberDashboard() {
             <div>
               <header
                 className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                style={{ backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
               >
                 <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -3256,7 +3258,7 @@ export default function MemberDashboard() {
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <header
                 className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
               >
                 <div className="absolute inset-0 bg-black/40 z-10"></div>
                 <div className="absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 bg-blue-500/5 rounded-full"></div>
@@ -3392,7 +3394,7 @@ export default function MemberDashboard() {
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <header
                 className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
               >
                 <div className="absolute inset-0 bg-black/40 z-10"></div>
                 {/* Header content */}
@@ -3849,7 +3851,7 @@ export default function MemberDashboard() {
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <header
                 className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
               >
                 <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -3974,7 +3976,7 @@ export default function MemberDashboard() {
               <div>
                 <header
                   className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                  style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                  style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
                 >
                   <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -4269,7 +4271,7 @@ export default function MemberDashboard() {
               <div>
                 <header
                   className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                  style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                  style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
                 >
                   <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -4417,7 +4419,7 @@ export default function MemberDashboard() {
             <div className="bg-white rounded-xl shadow-md p-4 md:p-6">
               <header
                 className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
               >
                 <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -4507,7 +4509,7 @@ export default function MemberDashboard() {
             <div className="bg-white rounded-xl shadow-md p-4 md:p-6">
               <header
                 className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
               >
                 <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -4619,7 +4621,7 @@ export default function MemberDashboard() {
               <div>
                 <header
                   className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                  style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                  style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
                 >
                   <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -5032,7 +5034,7 @@ export default function MemberDashboard() {
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <header
                 className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
               >
                 <div className="absolute inset-0 bg-black/40 z-10"></div>
                 <div className="absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 bg-blue-500/5 rounded-full"></div>
@@ -5450,7 +5452,7 @@ export default function MemberDashboard() {
               <div className="flex flex-col justify-between mb-8 gap-4">
                 <header
                   className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                  style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                  style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
                 >
                   <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -5637,7 +5639,7 @@ export default function MemberDashboard() {
               <div>
                 <header
                   className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-                  style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+                  style={{ backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
                 >
                   <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -6903,7 +6905,7 @@ export default function MemberDashboard() {
           <div className="absolute inset-0 z-0">
             <div
               className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: "url('/assets/b3.jpg')" }}
+              style={{ backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b3.jpg')` }}
             ></div>
 
             <div className="absolute inset-0 bg-white/50 z-10"></div>

@@ -758,6 +758,7 @@ const timestampWithDateAndCurrentTime = (dateString: string): Timestamp => {
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const IMAGE_BASE_PATH = "/society";
 
   // ==============================
   // STATE MANAGEMENT
@@ -4744,7 +4745,7 @@ export default function AdminDashboard() {
         <div className="flex-1 p-4 md:p-8">
           <header
             className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-200/70 relative overflow-hidden"
-            style={{ backgroundImage: "url('/assets/b8.jpg')" }}
+            style={{  backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b8.jpg')` }}
           >
             <div className="absolute inset-0 bg-black/40 z-10"></div>
 
@@ -10960,7 +10961,7 @@ export default function AdminDashboard() {
           <div className="absolute inset-0 z-0">
             <div
               className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: "url('/assets/b3.jpg')" }}
+              style={{ backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b3.jpg')` }}
             ></div>
 
             <div className="absolute inset-0 bg-white/50 z-10"></div>

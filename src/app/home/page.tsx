@@ -352,11 +352,11 @@ export default function Home() {
   };
 
   const imageSlides = [
-    "/assets/s1.jpg",
-    "/assets/s2.jpg",
-    "/assets/s3.jpg",
-    "/assets/s4.jpg",
-    "/assets/s5.jpg",
+    "${IMAGE_BASE_PATH}/assets/s1.jpg",
+    "${IMAGE_BASE_PATH}/assets/s2.jpg",
+    "${IMAGE_BASE_PATH}/assets/s3.jpg",
+    "${IMAGE_BASE_PATH}/assets/s4.jpg",
+    "${IMAGE_BASE_PATH}/assets/s5.jpg",
   ];
 
   const notices = [
