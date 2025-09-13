@@ -54,6 +54,8 @@ export default function Home() {
   const [contactError, setContactError] = useState("");
   const [contactSuccess, setContactSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const IMAGE_BASE_PATH = "/society";
+
 
   interface Testimonial {
     id: string;
@@ -1437,7 +1439,7 @@ export default function Home() {
         <div className="absolute inset-0 z-0">
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url('/assets/b3.jpg')" }}
+            style={{ backgroundImage: `url('${IMAGE_BASE_PATH}/assets/b3.jpg')` }}
           ></div>
 
           <div className="absolute inset-0 bg-white/50 z-10"></div>

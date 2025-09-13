@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
-import bgImage from '../../../public/assets/b3.jpg';
 import {
   collection,
   addDoc,
@@ -10961,7 +10960,7 @@ export default function AdminDashboard() {
           <div className="absolute inset-0 z-0">
             <div
               className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: `url(${bgImage.src})` }}
+              style={{ backgroundImage: "url('/assets/b3.jpg')" }}
             ></div>
 
             <div className="absolute inset-0 bg-white/50 z-10"></div>
