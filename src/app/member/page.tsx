@@ -1201,10 +1201,11 @@ export default function MemberDashboard() {
                   currentUser.uid,
                   memberData.name || "Member",
                   "member",
-                  true
+                  true,
+                  `Member logged in successfully`
                 );
                 localStorage.setItem(sessionKey, "true");
-              } // Proceed with fetching data
+              } 
 
               fetchUserData(currentUser.uid);
               setupRealtimeListeners(currentUser.uid);
